@@ -44,6 +44,7 @@ def combine(a: str, b: str) -> str:
     global lastRequest, requestCooldown, requestLock
 
     with requestLock:
+        print(f"Requesting {a} + {b}", flush=True)
         a = quote_plus(a)
         b = quote_plus(b)
         # Don't request too quickly
@@ -63,7 +64,6 @@ def combine(a: str, b: str) -> str:
             try:
                 with urlopen(request) as response:
                     # raise Exception(f"HTTP {response.getcode()}: {response.reason}")
-                    requestLock.release()
                     return json.load(response)["result"]
             except urllib.error.HTTPError:
                 time.sleep(1)

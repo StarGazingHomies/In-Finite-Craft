@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 
+# target_word = "geometry"
+
+
 @dataclass()
 class GameState:
     priority: int
@@ -12,7 +15,10 @@ class GameState:
 
     def __init__(self, item):
         self.item = item
+        # if target_word == "":
         self.priority = len(item)
+        # else:
+        #     self.priority = min([phraseDistance(target_word, i[0]) for i in item]) * len(item)
 
     def addRecipe(self, output: str, input1: str, input2: str) -> 'GameState':
         return GameState(self.item + ((output, (input1, input2)),))
@@ -27,35 +33,24 @@ class GameState:
         return self.priority == other.priority
 
     def __hash__(self):
-        return hash(self.item)
+        objects = [i[0] for i in self.item]
+        objects.sort()
+        return hash(tuple(objects))
 
 
 class NoRepeatPriorityQueue:
     queue: PriorityQueue
     seen: set
-    recipes_found: set
 
     def __init__(self):
         self.queue = PriorityQueue()
         self.seen = set()
-        self.recipes_found = set()
 
     def put(self, item):
-        if item not in self.seen:
-            self.queue.put(item)
-            self.seen.add(item)
-
-            if item.output() not in self.recipes_found:
-                self.recipes_found.add(item.output())
-                print(item.output() + ":")
-                for output, inputs in item.item:
-                    if inputs is not None:
-                        left, right = inputs
-                        print(f"{left} + {right} -> {output}")
-
-                if len(item.item) > 4 + 5:
-                    print("Current queue size: ", len(self.seen))
-                print(flush=True)
+        if item in self.seen:
+            return
+        self.queue.put(item)
+        self.seen.add(item)
 
     def get(self):
         item = self.queue.get()
