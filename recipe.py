@@ -10,7 +10,9 @@ from urllib.request import Request, urlopen
 
 lastRequest: float = 0
 requestCooldown: float = 0.5
-requestLock: Lock = Lock()
+requestLock: Lock = Lock()    # Not used, multiprocessing doesn't seem necessary given how API reqs is the bottleneck
+changes: int = 0
+autosaveInterval: int = 100
 
 
 def resultKey(param1, param2):
@@ -46,8 +48,16 @@ def persist_to_file(file_name):
 
     def decorator(func):
         def new_func(param1, param2):
+            global changes, autosaveInterval
+
             if resultKey(param1, param2) not in resultsCache:
                 resultsCache[resultKey(param1, param2)] = func(param1, param2)
+
+                changes += 1
+                if changes % autosaveInterval == 0:
+                    print("Autosaving...")
+                    save(resultsCache, file_name)
+
             return resultsCache[resultKey(param1, param2)]
 
         return new_func
@@ -58,7 +68,7 @@ def persist_to_file(file_name):
 # Adapted from analog_hors on Discord
 @persist_to_file('cache/recipes.json')
 def combine(a: str, b: str) -> str:
-    global lastRequest, requestCooldown, requestLock
+    global lastRequest, requestCooldown, requestLock, changes
 
     with requestLock:
         print(f"Requesting {a} + {b}", flush=True)

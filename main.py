@@ -63,7 +63,7 @@ def bfs():
 
                         # current, peak = tracemalloc.get_traced_memory()
                         # print(f"Current memory usage is {current / 2**20}MB; Peak was {peak / 2**20}MB")
-                        print("Current time elapsed: ", time.perf_counter() - start_time)
+                        # print("Current time elapsed: ", time.perf_counter() - start_time)
 
                         # if len(child) > 4 + 5:
                         #     print("Current queue size: ", len(queue))
