@@ -1,5 +1,6 @@
 import atexit
 import json
+import os
 import time
 import urllib.error
 from multiprocessing import Lock
@@ -18,6 +19,22 @@ def resultKey(param1, param2):
     return param1 + " + " + param2
 
 
+def save(resultsCache, file_name):
+    try:
+        json.dump(resultsCache, open(file_name, 'w'))
+    except FileNotFoundError:
+        print(f"Could not write to {file_name}! Trying to create a folder...", flush=True)
+        try:
+            os.mkdir("cache")
+            json.dump(resultsCache, open(file_name, 'w'))
+        except Exception as e:
+            print(f"Could not create folder or write to file: {e}", flush=True)
+            print(resultsCache)
+    except Exception as e:
+        print(f"Unrecognized Error: {e}", flush=True)
+        print(resultsCache)
+
+
 # Based on a stackoverflow post, forgot to write down which one
 def persist_to_file(file_name):
     try:
@@ -25,7 +42,7 @@ def persist_to_file(file_name):
     except (IOError, ValueError):
         resultsCache = {}
 
-    atexit.register(lambda: json.dump(resultsCache, open(file_name, 'w')))
+    atexit.register(lambda: save(resultsCache, file_name))
 
     def decorator(func):
         def new_func(param1, param2):
