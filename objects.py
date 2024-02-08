@@ -30,7 +30,13 @@ class GameState:
         return self.priority < other.priority
 
     def __eq__(self, other):
-        return self.priority == other.priority
+        objects = [i[0] for i in self.item]
+        objects.sort()
+
+        other_objects = [i[0] for i in other.item]
+        other_objects.sort()
+
+        return False not in [i == j for i, j in zip(objects, other_objects)]
 
     def __hash__(self):
         objects = [i[0] for i in self.item]
