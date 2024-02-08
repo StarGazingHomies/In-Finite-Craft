@@ -1,8 +1,8 @@
 # Wrapper around Priority_Queue with set so that we don't get repeats
-
+from collections import deque
 from queue import PriorityQueue, SimpleQueue
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, TextIO, BinaryIO
 
 
 # target_word = "geometry"
@@ -23,25 +23,33 @@ class GameState:
     def addRecipe(self, output: str, input1: str, input2: str) -> 'GameState':
         return GameState(self.item + ((output, (input1, input2)),))
 
+    @property
     def output(self):
         return self.item[-1][0]
 
-    def __lt__(self, other):
-        return self.priority < other.priority
-
-    def __eq__(self, other):
+    @property
+    def objects(self):
         objects = [i[0] for i in self.item]
         objects.sort()
+        return tuple(objects)
 
-        other_objects = [i[0] for i in other.item]
-        other_objects.sort()
+    def __lt__(self, other: 'GameState'):
+        if self.priority != other.priority:
+            return self.priority < other.priority
+        return str(self.objects) < str(other.objects)
 
-        return False not in [i == j for i, j in zip(objects, other_objects)]
+    def __eq__(self, other: 'GameState'):
+        return False not in [i == j for i, j in zip(self.objects, other.objects)]
 
     def __hash__(self):
-        objects = [i[0] for i in self.item]
-        objects.sort()
-        return hash(tuple(objects))
+        return hash(tuple(self.objects))
+
+    def __str__(self):
+        return str(self.item)
+
+
+def gameStateFromString(string: str) -> GameState:
+    return GameState(tuple([tuple(i.split(" + ")) for i in string.split(", ")]))
 
 
 class NoRepeatPriorityQueue:
@@ -63,10 +71,50 @@ class NoRepeatPriorityQueue:
         return item
 
     def __len__(self):
-        return len(self.seen)
+        return self.queue.qsize()
 
     def __contains__(self, item):
         return item in self.seen
 
     def __str__(self):
         return str(self.queue)
+
+
+class ReadStream:
+    file: TextIO
+
+    def __init__(self, fileName: str):
+        self.file = open(fileName, "r", buffering=-1)
+
+    def next(self) -> str:
+        return self.file.readline()
+
+    def peek(self) -> str:
+        tell = self.file.tell()
+        val = self.file.readline()
+        self.file.seek(tell)
+        return val
+
+    def __del__(self):
+        self.file.close()
+
+
+class WriteStream:
+    file: TextIO
+
+    def __init__(self, fileName: str):
+        self.file = open(fileName, "w", buffering=-1)
+
+    def write(self, string: str):
+        self.file.write(string)
+
+    def __del__(self):
+        self.file.close()
+
+
+class FileCachePriorityQueue:
+    next: PriorityQueue
+
+    def __init__(self, fileName: str):
+        self.next = PriorityQueue()
+

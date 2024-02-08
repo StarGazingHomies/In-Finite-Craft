@@ -8,11 +8,10 @@ from multiprocessing import Lock
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
 
-
 # Basically constants
 lastRequest: float = 0
-requestCooldown: float = 0.5
-requestLock: Lock = Lock()    # Should only be used before any network requests are made
+requestCooldown: float = 0.5 # 0.5s is safe for this API
+requestLock: Lock = Lock()   # Multiprocessing - not implemented yet
 changes: int = 0
 autosaveInterval: int = 100
 localOnly: bool = True
@@ -26,55 +25,55 @@ def resultKey(param1, param2):
     return param1 + " + " + param2
 
 
-def save(resultsCache, file_name):
+def save(dictionary, file_name):
     try:
-        json.dump(resultsCache, open(file_name, 'w'))
+        json.dump(dictionary, open(file_name, 'w'))
     except FileNotFoundError:
         print(f"Could not write to {file_name}! Trying to create a folder...", flush=True)
         try:
             os.mkdir("cache")
-            json.dump(resultsCache, open(file_name, 'w'))
+            json.dump(dictionary, open(file_name, 'w'))
         except Exception as e:
             print(f"Could not create folder or write to file: {e}", flush=True)
-            print(resultsCache)
+            print(dictionary)
     except Exception as e:
         print(f"Unrecognized Error: {e}", flush=True)
-        print(resultsCache)
+        print(dictionary)
 
 
 # Based on a stackoverflow post, forgot to write down which one
-def persist_to_file(file_name):
+def saveRecipesToFile(fileName, keyFunc):
     try:
-        resultsCache = json.load(open(file_name, 'r'))
+        resultsCache = json.load(open(fileName, 'r'))
     except (IOError, ValueError):
         resultsCache = {}
 
-    atexit.register(lambda: save(resultsCache, file_name))
+    atexit.register(lambda: save(resultsCache, fileName))
 
     def decorator(func):
-        def new_func(param1, param2):
+        def newFunc(*args):
             global changes, autosaveInterval, localOnly
 
-            if resultKey(param1, param2) not in resultsCache:
+            if keyFunc(*args) not in resultsCache:
                 # For viewing existing data only
                 if localOnly:
                     sys.exit()
-                resultsCache[resultKey(param1, param2)] = func(param1, param2)
+                resultsCache[keyFunc(*args)] = func(*args)
 
                 changes += 1
                 if changes % autosaveInterval == 0:
                     print("Autosaving...")
-                    save(resultsCache, file_name)
+                    save(resultsCache, fileName)
 
-            return resultsCache[resultKey(param1, param2)]
+            return resultsCache[keyFunc(*args)]
 
-        return new_func
+        return newFunc
 
     return decorator
 
 
 # Adapted from analog_hors on Discord
-@persist_to_file('cache/recipes.json')
+@saveRecipesToFile('cache/recipes.json', resultKey)
 def combine(a: str, b: str) -> str:
     global lastRequest, requestCooldown, requestLock, changes, sleepTime, retryExponent
 
@@ -82,7 +81,8 @@ def combine(a: str, b: str) -> str:
         print(f"Requesting {a} + {b}", flush=True)
         a = quote_plus(a)
         b = quote_plus(b)
-        # Don't request too quickly
+
+        # Don't request too quickly. Have been 429'd way too many times
         if (time.perf_counter() - lastRequest) < requestCooldown:
             # print(f"Sleeping for {requestCooldown - (time.perf_counter() - lastRequest)} seconds", flush=True)
             time.sleep(requestCooldown - (time.perf_counter() - lastRequest))
@@ -104,4 +104,8 @@ def combine(a: str, b: str) -> str:
                 time.sleep(sleepTime)
                 sleepTime *= retryExponent
                 print("Retrying...", flush=True)
+
+
+
+
 

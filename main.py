@@ -2,7 +2,7 @@ import multiprocessing
 import sys
 import time
 
-from objects import NoRepeatPriorityQueue, GameState
+from objects import NoRepeatPriorityQueue, GameState, gameStateFromString
 from typing import Optional
 
 import recipe
@@ -30,6 +30,9 @@ def bfs():
 
     queue = NoRepeatPriorityQueue()
     queue.put(GameState(tuple(init_state.items())))
+
+    print(GameState(tuple(init_state.items())))
+    print(gameStateFromString(str(GameState(tuple(init_state.items())))))
 
     start_time = time.perf_counter()
     recipes_found = set()
