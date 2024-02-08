@@ -39,7 +39,7 @@ def persist_to_file(file_name):
     return decorator
 
 
-@persist_to_file('recipes.json')
+@persist_to_file('cache/recipes.json')
 def combine(a: str, b: str) -> str:
     global lastRequest, requestCooldown
     print(a, "+", b)

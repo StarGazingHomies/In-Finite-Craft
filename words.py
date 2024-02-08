@@ -2,7 +2,7 @@
 # Word Representation. Downloaded from https://nlp.stanford.edu/projects/glove/
 from functools import cache
 
-filePath = "C:/Users/shjer/Desktop/Programming/glove.6B/glove.6B.200d.txt"
+filePath = "../glove.6B/glove.6B.200d.txt"
 
 with open(filePath, 'r', encoding='utf-8') as file:
     words = file.readlines()
