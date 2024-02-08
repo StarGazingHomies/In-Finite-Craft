@@ -1,6 +1,7 @@
 import atexit
 import json
 import os
+import sys
 import time
 import urllib.error
 from multiprocessing import Lock
@@ -8,11 +9,15 @@ from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
 
 
+# Basically constants
 lastRequest: float = 0
 requestCooldown: float = 0.5
-requestLock: Lock = Lock()    # Not used, multiprocessing doesn't seem necessary given how API reqs is the bottleneck
+requestLock: Lock = Lock()    # Should only be used before any network requests are made
 changes: int = 0
 autosaveInterval: int = 100
+localOnly: bool = True
+sleepTime: float = 1.0
+retryExponent: float = 2.0
 
 
 def resultKey(param1, param2):
@@ -48,9 +53,12 @@ def persist_to_file(file_name):
 
     def decorator(func):
         def new_func(param1, param2):
-            global changes, autosaveInterval
+            global changes, autosaveInterval, localOnly
 
             if resultKey(param1, param2) not in resultsCache:
+                # For viewing existing data only
+                if localOnly:
+                    sys.exit()
                 resultsCache[resultKey(param1, param2)] = func(param1, param2)
 
                 changes += 1
@@ -68,7 +76,7 @@ def persist_to_file(file_name):
 # Adapted from analog_hors on Discord
 @persist_to_file('cache/recipes.json')
 def combine(a: str, b: str) -> str:
-    global lastRequest, requestCooldown, requestLock, changes
+    global lastRequest, requestCooldown, requestLock, changes, sleepTime, retryExponent
 
     with requestLock:
         print(f"Requesting {a} + {b}", flush=True)
@@ -93,6 +101,7 @@ def combine(a: str, b: str) -> str:
                     # raise Exception(f"HTTP {response.getcode()}: {response.reason}")
                     return json.load(response)["result"]
             except urllib.error.HTTPError:
-                time.sleep(1)
+                time.sleep(sleepTime)
+                sleepTime *= retryExponent
                 print("Retrying...", flush=True)
 

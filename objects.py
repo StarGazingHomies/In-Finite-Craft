@@ -60,7 +60,6 @@ class NoRepeatPriorityQueue:
 
     def get(self):
         item = self.queue.get()
-        self.seen.remove(item)
         return item
 
     def __len__(self):
