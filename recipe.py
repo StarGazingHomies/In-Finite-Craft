@@ -42,31 +42,30 @@ def persist_to_file(file_name):
 @persist_to_file('recipes.json')
 def combine(a: str, b: str) -> str:
     global lastRequest, requestCooldown, requestLock
-    requestLock.acquire()
 
-    print(a, "+", b)
-    a = quote_plus(a)
-    b = quote_plus(b)
-    # Don't request too quickly
-    if (time.perf_counter() - lastRequest) < requestCooldown:
-        # print(f"Sleeping for {requestCooldown - (time.perf_counter() - lastRequest)} seconds", flush=True)
-        time.sleep(requestCooldown - (time.perf_counter() - lastRequest))
-    lastRequest = time.perf_counter()
+    with requestLock:
+        a = quote_plus(a)
+        b = quote_plus(b)
+        # Don't request too quickly
+        if (time.perf_counter() - lastRequest) < requestCooldown:
+            # print(f"Sleeping for {requestCooldown - (time.perf_counter() - lastRequest)} seconds", flush=True)
+            time.sleep(requestCooldown - (time.perf_counter() - lastRequest))
+        lastRequest = time.perf_counter()
 
-    request = Request(
-        f"https://neal.fun/api/infinite-craft/pair?first={a}&second={b}",
-        headers={
-            "Referer": "https://neal.fun/infinite-craft/",
-            "User-Agent": "curl/7.54.1",
-        },
-    )
-    while True:
-        try:
-            with urlopen(request) as response:
-                # raise Exception(f"HTTP {response.getcode()}: {response.reason}")
-                requestLock.release()
-                return json.load(response)["result"]
-        except urllib.error.HTTPError:
-            time.sleep(1)
-            print("Retrying...", flush=True)
+        request = Request(
+            f"https://neal.fun/api/infinite-craft/pair?first={a}&second={b}",
+            headers={
+                "Referer": "https://neal.fun/infinite-craft/",
+                "User-Agent": "curl/7.54.1",
+            },
+        )
+        while True:
+            try:
+                with urlopen(request) as response:
+                    # raise Exception(f"HTTP {response.getcode()}: {response.reason}")
+                    requestLock.release()
+                    return json.load(response)["result"]
+            except urllib.error.HTTPError:
+                time.sleep(1)
+                print("Retrying...", flush=True)
 

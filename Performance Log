@@ -1,0 +1,20 @@
+TARGET: Finish all objects of distance(5)
+
+
+Original code by analog_hors + cache to file:
+Current queue size:  1471366
+Current time elapsed:  2.1512942999979714
+Memory usage peak was 598.4449052810669MB (Separate run due to performance impacts)
+
+
+New code v1 (with checking for repeats + priority queue):
+Current queue size:  1455570
+Current time elapsed:  7.642249399999855
+
+New code v1 (with checking for repeats + simple queue):
+Current queue size:  1471366
+Current time elapsed:  5.377537199994549
+
+New code v1 (with checking for repeats + with deque):
+Current queue size:  1471366
+Current time elapsed:  5.427341200003866
