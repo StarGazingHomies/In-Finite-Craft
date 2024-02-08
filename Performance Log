@@ -1,9 +1,12 @@
 
-Original code by analog_hors + cache to file:
-Memory usage:
-~8.8GiB for 1000 objects
-~34GiB until new objects
+Original code by analog_hors + cache to file vs New Code v1
+100 recipes:
+Memory Usage:               2.09 --> 0.48 MiB
+Time:                       0.02 --> 0.012 seconds
 
-New code v1 (with checking for repeats + priority queue + cache to file):
-7.6GiB for 1000 objects
-~20GiB until new objects (maybe the ordering is important though)
+486 recipes: (distance 5)
+Memory Usage:                531 --> 9.9 MiB
+Time:                       1.89 --> 0.27 seconds
+1000 recipes:
+Memory Usage:             8623.3 --> 52.5 MiB
+Time:                        103 --> 1.75 seconds

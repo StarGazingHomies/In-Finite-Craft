@@ -18,7 +18,7 @@ def resultKey(param1, param2):
     return param1 + " + " + param2
 
 
-# Based on a stackoverflow post, dunno which
+# Based on a stackoverflow post, forgot to write down which one
 def persist_to_file(file_name):
     try:
         resultsCache = json.load(open(file_name, 'r'))

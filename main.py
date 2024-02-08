@@ -9,6 +9,8 @@ import recipe
 import tracemalloc
 
 
+# Adapted from analog_hors on Manechat
+# https://discord.com/channels/98609319519453184/1204570015857250344/1204753221294497792
 def bfs():
     State = dict[[str, Optional[tuple[str, str]]]]
 
