@@ -15,13 +15,13 @@ class GameState:
 
     def __init__(self, item):
         self.item = item
-        # if target_word == "":
         self.priority = len(item)
-        # else:
-        #     self.priority = min([phraseDistance(target_word, i[0]) for i in item]) * len(item)
 
     def addRecipe(self, output: str, input1: str, input2: str) -> 'GameState':
         return GameState(self.item + ((output, (input1, input2)),))
+
+    def popRecipe(self) -> 'GameState':
+        return GameState(self.item[:-1])
 
     @property
     def output(self):
@@ -78,43 +78,3 @@ class NoRepeatPriorityQueue:
 
     def __str__(self):
         return str(self.queue)
-
-
-class ReadStream:
-    file: TextIO
-
-    def __init__(self, fileName: str):
-        self.file = open(fileName, "r", buffering=-1)
-
-    def next(self) -> str:
-        return self.file.readline()
-
-    def peek(self) -> str:
-        tell = self.file.tell()
-        val = self.file.readline()
-        self.file.seek(tell)
-        return val
-
-    def __del__(self):
-        self.file.close()
-
-
-class WriteStream:
-    file: TextIO
-
-    def __init__(self, fileName: str):
-        self.file = open(fileName, "w", buffering=-1)
-
-    def write(self, string: str):
-        self.file.write(string)
-
-    def __del__(self):
-        self.file.close()
-
-
-class FileCachePriorityQueue:
-    next: PriorityQueue
-
-    def __init__(self, fileName: str):
-        self.next = PriorityQueue()
-

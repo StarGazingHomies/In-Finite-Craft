@@ -10,8 +10,8 @@ from urllib.request import Request, urlopen
 
 # Basically constants
 lastRequest: float = 0
-requestCooldown: float = 0.5 # 0.5s is safe for this API
-requestLock: Lock = Lock()   # Multiprocessing - not implemented yet
+requestCooldown: float = 0.5  # 0.5s is safe for this API
+# requestLock: Lock = Lock()    # Multiprocessing - not implemented yet
 changes: int = 0
 autosaveInterval: int = 100
 localOnly: bool = True
@@ -42,7 +42,7 @@ def save(dictionary, file_name):
 
 
 # Based on a stackoverflow post, forgot to write down which one
-def saveRecipesToFile(fileName, keyFunc):
+def persistToFile(fileName, keyFunc):
     try:
         resultsCache = json.load(open(fileName, 'r'))
     except (IOError, ValueError):
@@ -73,37 +73,39 @@ def saveRecipesToFile(fileName, keyFunc):
 
 
 # Adapted from analog_hors on Discord
-@saveRecipesToFile('cache/recipes.json', resultKey)
+@persistToFile('cache/recipes.json', resultKey)
 def combine(a: str, b: str) -> str:
     global lastRequest, requestCooldown, requestLock, changes, sleepTime, retryExponent
 
-    with requestLock:
-        print(f"Requesting {a} + {b}", flush=True)
-        a = quote_plus(a)
-        b = quote_plus(b)
+    # with requestLock:
+    print(f"Requesting {a} + {b}", flush=True)
+    a = quote_plus(a)
+    b = quote_plus(b)
 
-        # Don't request too quickly. Have been 429'd way too many times
-        if (time.perf_counter() - lastRequest) < requestCooldown:
-            # print(f"Sleeping for {requestCooldown - (time.perf_counter() - lastRequest)} seconds", flush=True)
-            time.sleep(requestCooldown - (time.perf_counter() - lastRequest))
-        lastRequest = time.perf_counter()
+    # Don't request too quickly. Have been 429'd way too many times
+    t = time.perf_counter()
+    if (t - lastRequest) < requestCooldown:
+        # print("Sleeping...", flush=True)
+        print(f"Sleeping for {requestCooldown - (time.perf_counter() - lastRequest)} seconds", flush=True)
+        time.sleep(requestCooldown - (t - lastRequest))
+    lastRequest = time.perf_counter()
 
-        request = Request(
-            f"https://neal.fun/api/infinite-craft/pair?first={a}&second={b}",
-            headers={
-                "Referer": "https://neal.fun/infinite-craft/",
-                "User-Agent": "curl/7.54.1",
-            },
-        )
-        while True:
-            try:
-                with urlopen(request) as response:
-                    # raise Exception(f"HTTP {response.getcode()}: {response.reason}")
-                    return json.load(response)["result"]
-            except urllib.error.HTTPError:
-                time.sleep(sleepTime)
-                sleepTime *= retryExponent
-                print("Retrying...", flush=True)
+    request = Request(
+        f"https://neal.fun/api/infinite-craft/pair?first={a}&second={b}",
+        headers={
+            "Referer": "https://neal.fun/infinite-craft/",
+            "User-Agent": "curl/7.54.1",
+        },
+    )
+    while True:
+        try:
+            with urlopen(request) as response:
+                # raise Exception(f"HTTP {response.getcode()}: {response.reason}")
+                return json.load(response)["result"]
+        except urllib.error.HTTPError:
+            time.sleep(sleepTime)
+            sleepTime *= retryExponent
+            print("Retrying...", flush=True)
 
 
 

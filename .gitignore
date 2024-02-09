@@ -1,4 +1,8 @@
+# Local save files
 cache/*
+recipes.txt
+
+# Other stuff
 .idea/*
 pycache/*
 *.pyc
