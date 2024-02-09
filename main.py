@@ -1,6 +1,7 @@
 import multiprocessing
 import sys
 import time
+from queue import SimpleQueue
 
 from objects import NoRepeatPriorityQueue, GameState, gameStateFromString
 from typing import Optional
@@ -31,11 +32,17 @@ def bfs():
     queue = NoRepeatPriorityQueue()
     queue.put(GameState(tuple(init_state.items())))
 
-    print(GameState(tuple(init_state.items())))
-    print(gameStateFromString(str(GameState(tuple(init_state.items())))))
+    # print(GameState(tuple(init_state.items())))
+    # print(gameStateFromString(str(GameState(tuple(init_state.items())))))
 
     start_time = time.perf_counter()
     recipes_found = set()
+    curLength = 0
+    originalLength = len(init_state)
+
+    recipeFile = "recipes.txt"
+
+    best_recipes: SimpleQueue[str] = SimpleQueue()
 
     while len(queue) > 0:
         state = queue.get()
@@ -58,22 +65,24 @@ def bfs():
 
                     if output not in recipes_found:
                         recipes_found.add(output)
-                        print(str(len(recipes_found)) + ": " + output)
+                        best_recipes.put(str(len(recipes_found)) + ": " + output)
                         for output, inputs in child:
                             if inputs is not None:
                                 left, right = inputs
-                                print(f"{left} + {right} -> {output}")
+                                best_recipes.put(f"{left} + {right} -> {output}")
 
-                        # current, peak = tracemalloc.get_traced_memory()
-                        # print(f"Current memory usage is {current / 2**20}MB; Peak was {peak / 2**20}MB")
-                        # print("Current time elapsed: ", time.perf_counter() - start_time)
-
-                        # if len(child) > 4 + 5:
-                        #     print("Current queue size: ", len(queue))
+                        # if len(child) > curLength:
+                        #     print(str(len(recipes_found)) + ": " + output)
+                        #     curLength = len(child)
+                        #     current, peak = tracemalloc.get_traced_memory()
+                        #     print(f"Current memory usage is {current / 2**20}MB; Peak was {peak / 2**20}MB")
                         #     print("Current time elapsed: ", time.perf_counter() - start_time)
-                        #     return
+                        #     print("Completed depth: ", curLength - originalLength - 1)
+                        #     print(flush=True)
 
-                        print(flush=True)
+        with open(recipeFile, "a") as file:
+            while not best_recipes.empty():
+                file.write(best_recipes.get() + "\n")
 
 
 if __name__ == '__main__':
