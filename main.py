@@ -1,3 +1,4 @@
+import atexit
 import multiprocessing
 import sys
 import time
@@ -42,7 +43,14 @@ def bfs():
 
     recipeFile = "recipes.txt"
 
-    # best_recipes: SimpleQueue[str] = SimpleQueue()
+    best_recipes: SimpleQueue[str] = SimpleQueue()
+
+    def saveRecipes():
+        with open(recipeFile, "w") as file:
+            while not best_recipes.empty():
+                file.write(best_recipes.get() + "\n")
+
+    atexit.register(saveRecipes)
 
     while len(queue) > 0:
         state = queue.get()
@@ -66,12 +74,14 @@ def bfs():
                     if output not in recipes_found:
                         recipes_found.add(output)
                         print(str(len(recipes_found)) + ": " + output)
-                        # best_recipes.put(str(len(recipes_found)) + ": " + output)
+                        best_recipes.put(str(len(recipes_found)) + ": " + output)
                         for output, inputs in child:
                             if inputs is not None:
                                 left, right = inputs
                                 print(f"{left} + {right} -> {output}")
-                                # best_recipes.put(f"{left} + {right} -> {output}")
+                                best_recipes.put(f"{left} + {right} -> {output}")
+                        print(flush=True)
+                        best_recipes.put("")
 
                         # if len(child) > curLength:
                         #     print(str(len(recipes_found)) + ": " + output)
@@ -81,10 +91,6 @@ def bfs():
                         #     print("Current time elapsed: ", time.perf_counter() - start_time)
                         #     print("Completed depth: ", curLength - originalLength - 1)
                         #     print(flush=True)
-
-        # with open(recipeFile, "a") as file:
-        #     while not best_recipes.empty():
-        #         file.write(best_recipes.get() + "\n")
 
 
 if __name__ == '__main__':
