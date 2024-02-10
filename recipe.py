@@ -41,6 +41,19 @@ def save(dictionary, file_name):
         print(dictionary)
 
 
+discovery_file = "cache/discoveries.json"
+
+
+def add_discovery(a: str, b: str, result: str):
+    try:
+        discoveries = json.load(open(discovery_file, 'r'))
+    except (IOError, ValueError):
+        discoveries = {}
+
+    discoveries[result] = result_key(a, b)
+    json.dump(discoveries, open(discovery_file, 'w'))
+
+
 # Based on a stackoverflow post, forgot to write down which one
 def persist_to_file(file_name, key_func):
     try:
@@ -57,7 +70,7 @@ def persist_to_file(file_name, key_func):
             if key_func(*args) not in resultsCache:
                 # For viewing existing data only
                 if localOnly:
-                    sys.exit()
+                    return "Nothing"
                 resultsCache[key_func(*args)] = func(*args)
 
                 changes += 1
@@ -101,13 +114,26 @@ def combine(a: str, b: str) -> str:
         try:
             with urlopen(request) as response:
                 # raise Exception(f"HTTP {response.getcode()}: {response.reason}")
-                return json.load(response)["result"]
+                r = json.load(response)
+                if r['isNew']:
+                    add_discovery(a, b, r['result'])
+                return r["result"]
         except urllib.error.HTTPError:
             time.sleep(sleepTime)
             sleepTime *= retryExponent
             print("Retrying...", flush=True)
 
 
+def merge_recipe_files(file1: str, file2: str, output: str):
+    try:
+        recipes1 = json.load(open(file1, 'r'))
+        recipes2 = json.load(open(file2, 'r'))
+    except (IOError, ValueError):
+        print("Could not load recipe files", flush=True)
+        return
 
+    for key in recipes2:
+        if key not in recipes1:
+            recipes1[key] = recipes2[key]
 
-
+    save(recipes1, output)

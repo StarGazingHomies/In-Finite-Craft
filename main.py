@@ -72,6 +72,9 @@ class GameState:
     def tail_item(self) -> str:
         return self.items[-1]
 
+    def tail_index(self) -> int:
+        return self.state[-1]
+
 
 # best_recipes: dict[str] = dict()
 visited = set()
@@ -81,7 +84,7 @@ best_recipes_file: str = "best_recipes.txt"
 def process_node(state: GameState):
     if state.tail_item() not in visited:
         visited.add(state.tail_item())
-        with open(best_recipes_file, "a") as file:
+        with open(best_recipes_file, "a", encoding="utf-8") as file:
             file.write(str(len(visited)) + ": " + str(state) + "\n\n")
         # best_recipes[state.tail_item()] = str(state)
 
@@ -91,7 +94,7 @@ def dls(state: GameState, depth: int):
         process_node(state)
         return 1
     lower_limit = 0
-    if depth == 1 and len(state) >= 5:
+    if depth == 1 and state.tail_index() != -1:
         lower_limit = limit(len(state) - 1)
 
     count = 0
@@ -104,29 +107,55 @@ def dls(state: GameState, depth: int):
 
 
 def iterative_deepening_dfs():
-    with open("recipes.txt", "w"):
-        pass
+    open(best_recipes_file, "w").close()
 
-    init_state = {
-        "Water": None,
-        "Fire": None,
-        "Wind": None,
-        "Earth": None,
-    }
+    init_state = ["Water", "Fire", "Wind", "Earth"]
 
     curDepth = 1
 
     # start_time = time.perf_counter()
 
+    # Recipe Analysis
+
+    # with open("best_recipes_11k.txt", "r") as fin:
+    #     lines = fin.readlines()
+    #
+    # recipes = []
+    # cur_recipe = ""
+    # for line in lines:
+    #     if line.strip() == "":
+    #         output = cur_recipe.split(":")[1].strip()
+    #         recipes.append(cur_recipe.split(":", 2)[2])
+    #         try:
+    #             num = int(output)
+    #             # print(num, end=", ")
+    #             print(num, cur_recipe.split(":", 2)[2])
+    #             # print(flush=True)
+    #         except ValueError:
+    #             pass
+    #         finally:
+    #             cur_recipe = ""
+    #
+    #     else:
+    #         cur_recipe += line
+    # print(recipes)
+    # return
+
     while True:
+        # prev_visited = len(visited)
         dls(
             GameState(
-                list(init_state.keys()),
+                init_state,
                 [-1 for _ in range(len(init_state))],
                 set()),
             curDepth)
-        # print()
-        # print(len(visited))
+
+        print(len(visited))
+        if curDepth == 8:
+            break
+        # Only relevant for local files - if exhausted the outputs, stop
+        # if len(visited) == prev_visited:
+        #     break
 
         # Performance
         # current, peak = tracemalloc.get_traced_memory()

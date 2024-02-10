@@ -7,6 +7,13 @@ All benchmarks are ran on a personal system with the following specs:
 i9-13950HX,
 128GB RAM
 
+## Version 1.2.1
+
+Added a check for new discoveries. There's probably so many, and they're just
+wasted by the program otherwise.
+
+:(
+
 ## Version 1.2
 Core idea: It's possible to use a naive iddfs to achieve 
 polynomial memory complexity at the sacrifice of O((n!)^2)time complexity. 
@@ -126,7 +133,7 @@ Also, this is not a completed version of the code, since I still read in
 old recipes to check if the newly generated ones are the same depth. By
 removing this check, memory usage may decrease a fair bit.
 
-Realistically, remember that all the best recipes are stored in memory as well.
+Realistically, remember that all the crafting recipes are stored in memory as well.
 This is just optimizing for the algorithm itself, and it's been quite successful.
 Although time complexity is still O(9^n) ish, the constant is quite low.
 Also, this is multithread-able, although I may optimize for # of requests next update.
