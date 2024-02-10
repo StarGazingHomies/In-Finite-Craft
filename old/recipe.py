@@ -163,6 +163,27 @@ def best_recipes_to_json(recipe_file: str, output_file: str):
     save(relevant_recipes, output_file)
 
 
+def best_recipes_to_tsv(recipe_file: str, output_file: str):
+    try:
+        with open(recipe_file, "r") as fin:
+            lines = fin.readlines()
+    except (IOError, ValueError):
+        print("Could not load recipe file", flush=True)
+        return
+
+    relevant_recipes = []
+    for line in lines:
+        if '->' in line:
+            output = line.split("->")[1].strip()
+            inputs = line.split("->")[0].strip()
+            u, v = inputs.split("+")
+            relevant_recipes.append([u.strip(), v.strip(), output])
+
+    with open(output_file, "w") as fout:
+        for recipe in relevant_recipes:
+            fout.write(f"{recipe[0]}\t{recipe[1]}\t{recipe[2]}\n")
+
+
 def request_items(recipe_file: str):
     file = json.load(open(recipe_file, 'r'))
     # has_cinnamon = False
@@ -183,5 +204,51 @@ def remove_new(items_file: str, new_items_file: str):
     json.dump(new, open(new_items_file, 'w'))
 
 
+def recipe_to_csv(recipe_file: str, new_file: str):
+    file = json.load(open(recipe_file, 'r'))
+    with open(new_file, "w") as f:
+        for items, result in file.items():
+            try:
+                u, v = items.split(" + ")
+                u = u.replace("+", "")
+                v = v.replace("+", "")
+            except ValueError:
+                print(items)
+            f.write(f"{u}\t{v}\t{result}\n")
+
+
+def remove_plus_duplicates(recipe_file: str, new_file: str):
+    with open(recipe_file, "r") as f:
+        recipes = json.load(f)
+    new_recipes = {}
+    for key, value in recipes.items():
+        try:
+            u, v = key.split(" + ")
+            u = u.replace("+", " ")
+            v = v.replace("+", " ")
+        except ValueError:
+            continue
+        new_recipes[result_key(u, v)] = value
+    with open(new_file, "w") as f:
+        json.dump(new_recipes, f)
+
+
+def change_delimiter(file: str, new_file: str):
+    with open(file, "r") as f:
+        recipes = json.load(f)
+
+    new_recipes = {}
+    for key, value in recipes.items():
+        if key.count(" + ") > 1:
+            continue # Sorry, but re-request
+        u, v = key.split(" + ")
+        new_recipes[u + "\t" + v] = value
+
+    with open(new_file, "w") as f:
+        json.dump(new_recipes, f)
+
+
 if __name__ == '__main__':
-    remove_new("../cache/items.json", "cache/simple_items.json")
+    # merge_recipe_files("../cache/recipes.json", "../cache/recipes_search.json", "../cache/recipes_merged.json")
+    # remove_plus_duplicates("../cache/recipes_merged.json", "../cache/recipes_trim.json")
+    change_delimiter("../cache/recipes_trim.json", "../cache/recipes_tab.json")

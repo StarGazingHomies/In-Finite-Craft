@@ -6,17 +6,20 @@ import time
 import urllib.error
 # from multiprocessing import Lock
 from typing import Optional
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, unquote_plus
 from urllib.request import Request, urlopen
 
 # Basically constants
 # requestLock: Lock = Lock()    # Multiprocessing - not implemented yet
 
 
+DELIMITER = "\t"
+
+
 def result_key(param1, param2):
     if param1 > param2:
-        return param2 + " + " + param1
-    return param1 + " + " + param2
+        return param2 + DELIMITER + param1
+    return param1 + DELIMITER + param2
 
 
 def load_json(file_name):
@@ -61,13 +64,17 @@ class RecipeHandler:
         atexit.register(lambda: save_json(self.recipes_cache, self.recipes_file))
         atexit.register(lambda: save_json(self.items_cache, self.items_file))
 
-    def save_response(self, ingredient_1: str, ingredient_2: str, response: dict):
+    def save_response(self, a: str, b: str, response: dict):
+        # print(a, b, result_key(a, b), response)
         result = response['result']
         emoji = response['emoji']
         new = response['isNew']
+        # print(result)
 
         # Items - emoji, new discovery
         if result not in self.items_cache:
+            # print(f"Adding {result} to items cache...")
+            # print(self.items_cache[result])
             self.items_cache[result] = (emoji, new)
             self.items_changes += 1
             if self.items_changes % self.items_autosave_interval == 0:
@@ -75,18 +82,18 @@ class RecipeHandler:
                 save_json(self.items_cache, self.items_file)
 
         # Recipe: A + B --> C
-        if result_key(ingredient_1, ingredient_2) not in self.recipes_cache:
-            self.recipes_cache[result_key(ingredient_1, ingredient_2)] = result
-            self.recipes_changes += 1
-            if self.recipes_changes % self.recipe_autosave_interval == 0:
-                print("Autosaving recipes file...")
-                save_json(self.recipes_cache, self.recipes_file)
+        self.recipes_cache[result_key(a, b)] = result
+        self.recipes_changes += 1
+        if self.recipes_changes % self.recipe_autosave_interval == 0:
+            print("Autosaving recipes file...")
+            save_json(self.recipes_cache, self.recipes_file)
 
     def get_response(self, a: str, b: str) -> Optional[str]:
         if result_key(a, b) not in self.recipes_cache:
             return None
         result = self.recipes_cache[result_key(a, b)]
         if result not in self.items_cache:
+            print(f"Missing {result} in cache!")
             # print(f"{result}!!")
             # Didn't get the emoji. Useful for upgrading from a previous version.
             return None
@@ -103,8 +110,8 @@ class RecipeHandler:
 
         # with requestLock:
         print(f"Requesting {a} + {b}", flush=True)
-        a = quote_plus(a)
-        b = quote_plus(b)
+        a_req = quote_plus(a)
+        b_req = quote_plus(b)
 
         # Don't request too quickly. Have been 429'd way too many times
         t = time.perf_counter()
@@ -113,7 +120,7 @@ class RecipeHandler:
         self.last_request = time.perf_counter()
 
         request = Request(
-            f"https://neal.fun/api/infinite-craft/pair?first={a}&second={b}",
+            f"https://neal.fun/api/infinite-craft/pair?first={a_req}&second={b_req}",
             headers={
                 "Referer": "https://neal.fun/infinite-craft/",
                 "User-Agent": "curl/7.54.1",
