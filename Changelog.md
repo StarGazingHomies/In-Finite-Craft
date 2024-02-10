@@ -7,6 +7,14 @@ All benchmarks are ran on a personal system with the following specs:
 i9-13950HX,
 128GB RAM
 
+
+## Version 1.2.2
+
+
+A lot of code cleanup, especially in the `recipe.py` file.
+Also added item emoji saving.
+
+
 ## Version 1.2.1
 
 Added a check for new discoveries. There's probably so many, and they're just
@@ -18,14 +26,14 @@ wasted by the program otherwise.
 Core idea: It's possible to use a naive iddfs to achieve 
 polynomial memory complexity at the sacrifice of O((n!)^2)time complexity. 
 However, if we can check for repetition in an effective way, 
-we can achieve ~= O(10^n) time complexity as well. If I didn't do a dumb,
+we can achieve ~=(10^n) time complexity as well. If I didn't do a dumb,
 here are the theoretical complexity:
 ```
 Memory requirement:  O(d^3                 (1 additional set for each level, n(n+1)/2 items at most in set)
                     +recipeBookSize(d)     (recipes, which dominates here)
                     +numWords(d)           (storing optimal words, or *d for shortest paths)
 Time requirement:    O(d!^2)               (Worst case)
-                   ~=O(9^d)                (Experimental, due to collisions)
+                   ~= (9^d)                (Experimental, due to collisions)
 ```
 Empirically, here are the results up to depth 8, only storing words
 of a certain depth and not the recipe in memory.
@@ -66,8 +74,8 @@ vs
 C+D --> F
 A+B --> E
 We can check for ordering, just for the order of crafted items.
-This would mean {a_i} < {a_j} for all i < j, 
-where a_i is the index of the parent items.
+This would mean `{a_i} < {a_j}` for all `i < j`,
+where if you use `u <= v` to craft, then `a_i = u + v * (v+1) / 2`
 
 Example:
 ```
@@ -79,8 +87,8 @@ Recipe: [-1, -1, -1, -1, 6, 1, 20]
 would be ignored, since 6 < 1. We can always sort the list and come up with the same result.
 (Proof omitted)
 
-This is also experimentally correct up to depth 7, 
-where the number of recipes is 2682, identical to previously.
+This is also experimentally correct up to depth 8, 
+where the number of recipes is 6566, identical to previously.
 
 Note that for this benchmark, recipes are saved to memory by mistake. 
 However, I would not like to re-run since, with tracemalloc, the time
@@ -98,7 +106,7 @@ Also, note that the entire recipe file is ~6.5MiB.
 
 
 ### Idea 2
-Check, for every new word, if it's possible to reach the target word 
+Check, for every resulting word, if it's possible to reach the same word 
 using other combinations at the current step.
 This could be done using a set() and then checking if the target word is in the set.
 
@@ -114,7 +122,9 @@ This could be done using a set() and then checking if the target word is in the 
 As we can see, memory usage increased a tiny bit (due to the set), but time usage decreased by a lot.
 
 ### Idea 3
-All new words must use all previously crafted elements in its recipe.
+All new words of a given depth must use all previously crafted elements in its recipe.
+Otherwise, we can just remove the unused element, so the word must be at
+a lower depth.
 
 However, since I am too lazy to figure out a good way to implement this rn,
 we can reduce the condition to that the last item must use the 2nd last item. 
