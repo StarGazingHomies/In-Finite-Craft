@@ -1,98 +1,141 @@
-import atexit
-import multiprocessing
-import sys
 import time
-from queue import SimpleQueue
-
-from objects import NoRepeatPriorityQueue, GameState, gameStateFromString
+from functools import cache
 from typing import Optional
 
 import recipe
 import tracemalloc
 
 
-# Adapted from analog_hors on Manechat
-# https://discord.com/channels/98609319519453184/1204570015857250344/1204753221294497792
-def bfs():
-    State = dict[[str, Optional[tuple[str, str]]]]
+@cache
+def int_to_pair(n: int) -> tuple[int, int]:
+    if n < 0:
+        return -1, -1
+    j = 0
+    while n > j:
+        n -= j + 1
+        j += 1
+    i = n
+    return i, j
 
-    init_state: State = {
+
+@cache
+def limit(n: int) -> int:
+    return n * (n + 1) // 2
+
+
+class GameState2:
+    items: list[str]
+    state: list[int]
+    visited: list[set[str]]
+    children: set[str]
+
+    def __init__(self, items: list[str], state: list[int], children: set[str]):
+        self.state = state
+        self.items = items
+        self.children = children
+
+    def __str__(self):
+        steps = [self.items[-1] + ":"]
+        for i in range(len(self.state)):
+            left, right = int_to_pair(self.state[i])
+            if (left < 0) or (right < 0):
+                continue
+            steps.append(f"{self.items[left]} + {self.items[right]} -> {self.items[i]}")
+        return "\n".join(steps)
+
+    def __len__(self):
+        return len(self.state)
+
+    def __eq__(self, other):
+        return self.state == other.state
+
+    def __hash__(self):
+        return hash(str(self.state))
+
+    def child(self, i: int) -> Optional['GameState2']:
+        if i <= self.state[-1] or i >= limit(len(self)):
+            return None
+
+        u, v = int_to_pair(i)
+        craft_result = recipe.combine(self.items[u], self.items[v])
+        if (craft_result is None or
+                craft_result == "Nothing" or
+                craft_result in self.items or
+                craft_result in self.children):
+            return None
+        self.children.add(craft_result)
+
+        new_state = self.state + [i]
+        new_items = self.items + [craft_result]
+        return GameState2(new_items, new_state, self.children.copy())
+
+    def tail_item(self) -> str:
+        return self.items[-1]
+
+
+# best_recipes: dict[str] = dict()
+visited = set()
+
+
+def processNode(state: GameState2):
+    if state.tail_item() not in visited:
+        visited.add(state.tail_item())
+        print(str(len(visited)) + ": " + str(state), end="\n\n")
+        # best_recipes[state.tail_item()] = str(state)
+
+
+def dls(state: GameState2, depth: int):
+    if depth == 0:
+        processNode(state)
+        return 1
+    lower_limit = 0
+    if depth == 1 and len(state) >= 5:
+        lower_limit = limit(len(state) - 1)
+
+    count = 0
+    for i in range(lower_limit, limit(len(state))):
+        child = state.child(i)
+        if child is not None:
+            count += dls(child, depth - 1)
+
+    return count
+
+
+def iterative_deepening_dfs():
+    init_state = {
         "Water": None,
         "Fire": None,
         "Wind": None,
         "Earth": None,
-        # "Unicorn": None,
-        # "Pegasus": None,
-        # "Twilight Sparkle": None,
-        # "Rainbow Dash": None,
-        # "Princess Celestia": None
     }
-    for element in sys.argv[1:]:
-        init_state[element] = None
 
-    queue = NoRepeatPriorityQueue()
-    queue.put(GameState(tuple(init_state.items())))
+    curDepth = 1
 
-    # print(GameState(tuple(init_state.items())))
-    # print(gameStateFromString(str(GameState(tuple(init_state.items())))))
+    # start_time = time.perf_counter()
 
-    start_time = time.perf_counter()
-    recipes_found = set()
-    curLength = 0
-    originalLength = len(init_state)
+    while True:
+        dls(
+            GameState2(
+                list(init_state.keys()),
+                [-1 for _ in range(len(init_state))],
+                set()),
+            curDepth)
+        # print()
+        # print(len(visited))
 
-    recipeFile = "recipes.txt"
-
-    best_recipes: SimpleQueue[str] = SimpleQueue()
-
-    def saveRecipes():
-        with open(recipeFile, "w") as file:
-            while not best_recipes.empty():
-                file.write(best_recipes.get() + "\n")
-
-    atexit.register(saveRecipes)
-
-    while len(queue) > 0:
-        state = queue.get()
-        elements = state.item
-
-        for i in range(len(elements)):
-            for j in range(i, len(elements)):
-
-                elem1 = elements[i][0]
-                elem2 = elements[j][0]
-
-                output = recipe.combine(elem1, elem2)
-                if (output is None) or (output in [k[0] for k in elements]) or (output == "Nothing"):
-                    continue
-
-                if output not in elements:
-                    child = elements + ((output, (elem1, elem2)),)
-                    # print(child)
-                    queue.put(state.addRecipe(output, elem1, elem2))
-
-                    if output not in recipes_found:
-                        recipes_found.add(output)
-                        print(str(len(recipes_found)) + ": " + output)
-                        best_recipes.put(str(len(recipes_found)) + ": " + output)
-                        for output, inputs in child:
-                            if inputs is not None:
-                                left, right = inputs
-                                print(f"{left} + {right} -> {output}")
-                                best_recipes.put(f"{left} + {right} -> {output}")
-                        print(flush=True)
-                        best_recipes.put("")
-
-                        # if len(child) > curLength:
-                        #     print(str(len(recipes_found)) + ": " + output)
-                        #     curLength = len(child)
-                        #     current, peak = tracemalloc.get_traced_memory()
-                        #     print(f"Current memory usage is {current / 2**20}MB; Peak was {peak / 2**20}MB")
-                        #     print("Current time elapsed: ", time.perf_counter() - start_time)
-                        #     print("Completed depth: ", curLength - originalLength - 1)
-                        #     print(flush=True)
+        # Performance
+        # current, peak = tracemalloc.get_traced_memory()
+        # print(f"Current memory usage is {current / 2**20}MB; Peak was {peak / 2**20}MB")
+        # print(f"Current time elapsed: {time.perf_counter() - start_time:.4f}")
+        # print("Completed depth: ", curDepth)
+        # print(flush=True)
+        curDepth += 1
 
 
-if __name__ == '__main__':
+def main():
+    iterative_deepening_dfs()
+
+
+if __name__ == "__main__":
     # tracemalloc.start()
-    bfs()
+    main()

@@ -14,7 +14,7 @@ requestCooldown: float = 0.5  # 0.5s is safe for this API
 # requestLock: Lock = Lock()    # Multiprocessing - not implemented yet
 changes: int = 0
 autosaveInterval: int = 100
-# localOnly: bool = True
+localOnly: bool = False
 sleepTime: float = 1.0
 retryExponent: float = 2.0
 
@@ -78,7 +78,7 @@ def combine(a: str, b: str) -> str:
     global lastRequest, requestCooldown, requestLock, changes, sleepTime, retryExponent
 
     # with requestLock:
-    # print(f"Requesting {a} + {b}", flush=True)
+    print(f"Requesting {a} + {b}", flush=True)
     a = quote_plus(a)
     b = quote_plus(b)
 
@@ -86,7 +86,7 @@ def combine(a: str, b: str) -> str:
     t = time.perf_counter()
     if (t - lastRequest) < requestCooldown:
         # print("Sleeping...", flush=True)
-        print(f"Sleeping for {requestCooldown - (time.perf_counter() - lastRequest)} seconds", flush=True)
+        # print(f"Sleeping for {requestCooldown - (time.perf_counter() - lastRequest)} seconds", flush=True)
         time.sleep(requestCooldown - (t - lastRequest))
     lastRequest = time.perf_counter()
 

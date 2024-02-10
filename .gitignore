@@ -6,3 +6,4 @@ recipes.txt
 .idea/*
 pycache/*
 *.pyc
+*.txt
