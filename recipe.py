@@ -19,7 +19,7 @@ sleepTime: float = 1.0
 retryExponent: float = 2.0
 
 
-def resultKey(param1, param2):
+def result_key(param1, param2):
     if param1 > param2:
         return param2 + " + " + param1
     return param1 + " + " + param2
@@ -42,40 +42,40 @@ def save(dictionary, file_name):
 
 
 # Based on a stackoverflow post, forgot to write down which one
-def persistToFile(fileName, keyFunc):
+def persist_to_file(file_name, key_func):
     try:
-        resultsCache = json.load(open(fileName, 'r'))
+        resultsCache = json.load(open(file_name, 'r'))
     except (IOError, ValueError):
         resultsCache = {}
 
-    atexit.register(lambda: save(resultsCache, fileName))
+    atexit.register(lambda: save(resultsCache, file_name))
 
     def decorator(func):
-        def newFunc(*args):
+        def new_func(*args):
             global changes, autosaveInterval, localOnly
 
-            if keyFunc(*args) not in resultsCache:
+            if key_func(*args) not in resultsCache:
                 # For viewing existing data only
                 if localOnly:
                     sys.exit()
-                resultsCache[keyFunc(*args)] = func(*args)
+                resultsCache[key_func(*args)] = func(*args)
 
                 changes += 1
                 if changes % autosaveInterval == 0:
                     print("Autosaving...")
-                    save(resultsCache, fileName)
+                    save(resultsCache, file_name)
 
-            return resultsCache[keyFunc(*args)]
+            return resultsCache[key_func(*args)]
 
-        return newFunc
+        return new_func
 
     return decorator
 
 
 # Adapted from analog_hors on Discord
-@persistToFile('cache/recipes.json', resultKey)
+@persist_to_file('cache/recipes.json', result_key)
 def combine(a: str, b: str) -> str:
-    global lastRequest, requestCooldown, requestLock, changes, sleepTime, retryExponent
+    global lastRequest, requestCooldown, changes, sleepTime, retryExponent
 
     # with requestLock:
     print(f"Requesting {a} + {b}", flush=True)

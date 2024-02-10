@@ -36,21 +36,21 @@ def bfs():
     # print(GameState(tuple(init_state.items())))
     # print(gameStateFromString(str(GameState(tuple(init_state.items())))))
 
-    start_time = time.perf_counter()
+    # start_time = time.perf_counter()
     recipes_found = set()
-    curLength = 0
-    originalLength = len(init_state)
+    # curLength = 0
+    # originalLength = len(init_state)
 
     recipeFile = "recipes.txt"
 
     best_recipes: SimpleQueue[str] = SimpleQueue()
 
-    def saveRecipes():
+    def save_recipes():
         with open(recipeFile, "w") as file:
             while not best_recipes.empty():
                 file.write(best_recipes.get() + "\n")
 
-    atexit.register(saveRecipes)
+    atexit.register(save_recipes)
 
     while len(queue) > 0:
         state = queue.get()
@@ -69,7 +69,7 @@ def bfs():
                 if output not in elements:
                     child = elements + ((output, (elem1, elem2)),)
                     # print(child)
-                    queue.put(state.addRecipe(output, elem1, elem2))
+                    queue.put(state.add_recipe(output, elem1, elem2))
 
                     if output not in recipes_found:
                         recipes_found.add(output)

@@ -17,10 +17,10 @@ class GameState:
         self.item = item
         self.priority = len(item)
 
-    def addRecipe(self, output: str, input1: str, input2: str) -> 'GameState':
+    def add_recipe(self, output: str, input1: str, input2: str) -> 'GameState':
         return GameState(self.item + ((output, (input1, input2)),))
 
-    def popRecipe(self) -> 'GameState':
+    def pop_recipe(self) -> 'GameState':
         return GameState(self.item[:-1])
 
     @property

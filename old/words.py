@@ -2,7 +2,7 @@
 # Word Representation. Downloaded from https://nlp.stanford.edu/projects/glove/
 from functools import cache
 
-filePath = "../glove.6B/glove.6B.200d.txt"
+filePath = "../../glove.6B/glove.6B.200d.txt"
 
 with open(filePath, 'r', encoding='utf-8') as file:
     words = file.readlines()
@@ -14,7 +14,7 @@ with open(filePath, 'r', encoding='utf-8') as file:
         wordVectors[word] = vector
 
 
-def getVector(wrd: str) -> list[float]:
+def get_vector(wrd: str) -> list[float]:
     wrd = wrd.lower()
     if wrd not in wordVectors:
         return [2] * len(wordVectors["the"])
@@ -22,25 +22,25 @@ def getVector(wrd: str) -> list[float]:
 
 
 def distance(word1: str, word2: str) -> float:
-    return sum((a - b) ** 2 for a, b in zip(getVector(word1), getVector(word2))) ** 0.5
+    return sum((a - b) ** 2 for a, b in zip(get_vector(word1), get_vector(word2))) ** 0.5
 
 
-def phraseVec(phrase: str) -> list[float]:
+def phrase_vec(phrase: str) -> list[float]:
     phrase = phrase.split()
-    return [sum(i) for i in zip(*[getVector(w) for w in phrase])]
+    return [sum(i) for i in zip(*[get_vector(w) for w in phrase])]
 
 
 @cache
-def phraseDistance(phrase1: str, phrase2: str) -> float:
-    return sum((a - b) ** 2 for a, b in zip(phraseVec(phrase1), phraseVec(phrase2))) ** 0.5
+def phrase_distance(phrase1: str, phrase2: str) -> float:
+    return sum((a - b) ** 2 for a, b in zip(phrase_vec(phrase1), phrase_vec(phrase2))) ** 0.5
 
 
 def main():
-    print(phraseDistance("hello world", "hello world"))
-    print(phraseDistance("geometry dash", "rainbow dash"))
-    print(phraseDistance("hug", "love"))
-    print(phraseDistance("toad", "frog"))
-    print(phraseDistance("twilight sparkle", "rainbow dash"))
+    print(phrase_distance("hello world", "hello world"))
+    print(phrase_distance("geometry dash", "rainbow dash"))
+    print(phrase_distance("hug", "love"))
+    print(phrase_distance("toad", "frog"))
+    print(phrase_distance("twilight sparkle", "rainbow dash"))
 
 
 if __name__ == '__main__':

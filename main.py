@@ -1,9 +1,9 @@
-import time
+# import time
 from functools import cache
 from typing import Optional
 
 import recipe
-import tracemalloc
+# import tracemalloc
 
 
 @cache
@@ -23,7 +23,7 @@ def limit(n: int) -> int:
     return n * (n + 1) // 2
 
 
-class GameState2:
+class GameState:
     items: list[str]
     state: list[int]
     visited: list[set[str]]
@@ -52,7 +52,7 @@ class GameState2:
     def __hash__(self):
         return hash(str(self.state))
 
-    def child(self, i: int) -> Optional['GameState2']:
+    def child(self, i: int) -> Optional['GameState']:
         if i <= self.state[-1] or i >= limit(len(self)):
             return None
 
@@ -67,7 +67,7 @@ class GameState2:
 
         new_state = self.state + [i]
         new_items = self.items + [craft_result]
-        return GameState2(new_items, new_state, self.children.copy())
+        return GameState(new_items, new_state, self.children.copy())
 
     def tail_item(self) -> str:
         return self.items[-1]
@@ -75,18 +75,20 @@ class GameState2:
 
 # best_recipes: dict[str] = dict()
 visited = set()
+best_recipes_file: str = "best_recipes.txt"
 
 
-def processNode(state: GameState2):
+def process_node(state: GameState):
     if state.tail_item() not in visited:
         visited.add(state.tail_item())
-        print(str(len(visited)) + ": " + str(state), end="\n\n")
+        with open(best_recipes_file, "a") as file:
+            file.write(str(len(visited)) + ": " + str(state) + "\n\n")
         # best_recipes[state.tail_item()] = str(state)
 
 
-def dls(state: GameState2, depth: int):
+def dls(state: GameState, depth: int):
     if depth == 0:
-        processNode(state)
+        process_node(state)
         return 1
     lower_limit = 0
     if depth == 1 and len(state) >= 5:
@@ -102,6 +104,9 @@ def dls(state: GameState2, depth: int):
 
 
 def iterative_deepening_dfs():
+    with open("recipes.txt", "w"):
+        pass
+
     init_state = {
         "Water": None,
         "Fire": None,
@@ -115,7 +120,7 @@ def iterative_deepening_dfs():
 
     while True:
         dls(
-            GameState2(
+            GameState(
                 list(init_state.keys()),
                 [-1 for _ in range(len(init_state))],
                 set()),
