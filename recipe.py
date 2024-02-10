@@ -93,7 +93,7 @@ class RecipeHandler:
             return None
         result = self.recipes_cache[result_key(a, b)]
         if result not in self.items_cache:
-            print(f"Missing {result} in cache!")
+            # print(f"Missing {result} in cache!")
             # print(f"{result}!!")
             # Didn't get the emoji. Useful for upgrading from a previous version.
             return None
