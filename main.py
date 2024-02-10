@@ -3,7 +3,11 @@ from functools import cache
 from typing import Optional
 
 import recipe
+
+
 # import tracemalloc
+
+recipe_handler = recipe2.RecipeHandler()
 
 
 @cache
@@ -57,7 +61,7 @@ class GameState:
             return None
 
         u, v = int_to_pair(i)
-        craft_result = recipe.combine(self.items[u], self.items[v])
+        craft_result = recipe_handler.combine(self.items[u], self.items[v])
         if (craft_result is None or
                 craft_result == "Nothing" or
                 craft_result in self.items or
@@ -151,8 +155,8 @@ def iterative_deepening_dfs():
             curDepth)
 
         print(len(visited))
-        if curDepth == 8:
-            break
+        # if curDepth == 8:
+        #     break
         # Only relevant for local files - if exhausted the outputs, stop
         # if len(visited) == prev_visited:
         #     break
@@ -167,9 +171,9 @@ def iterative_deepening_dfs():
 
 
 def main():
+    # tracemalloc.start()
     iterative_deepening_dfs()
 
 
 if __name__ == "__main__":
-    # tracemalloc.start()
     main()

@@ -1,22 +1,16 @@
 import atexit
 import json
 import os
-import sys
+# import sys
 import time
 import urllib.error
-from multiprocessing import Lock
+# from multiprocessing import Lock
+from typing import Optional
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
 
 # Basically constants
-lastRequest: float = 0
-requestCooldown: float = 0.5  # 0.5s is safe for this API
 # requestLock: Lock = Lock()    # Multiprocessing - not implemented yet
-changes: int = 0
-autosaveInterval: int = 100
-localOnly: bool = False
-sleepTime: float = 1.0
-retryExponent: float = 2.0
 
 
 def result_key(param1, param2):
@@ -25,13 +19,17 @@ def result_key(param1, param2):
     return param1 + " + " + param2
 
 
-def save(dictionary, file_name):
+def load_json(file_name):
+    return json.load(open(file_name, 'r'))
+
+
+def save_json(dictionary, file_name):
     try:
         json.dump(dictionary, open(file_name, 'w'))
     except FileNotFoundError:
-        print(f"Could not write to {file_name}! Trying to create a folder...", flush=True)
+        print(f"Could not write to {file_name}! Trying to create cache folder...", flush=True)
         try:
-            os.mkdir("cache")
+            os.mkdir("cache")  # TODO: generalize
             json.dump(dictionary, open(file_name, 'w'))
         except Exception as e:
             print(f"Could not create folder or write to file: {e}", flush=True)
@@ -41,99 +39,94 @@ def save(dictionary, file_name):
         print(dictionary)
 
 
-discovery_file = "cache/discoveries.json"
+class RecipeHandler:
+    recipes_cache: dict[str, str]
+    items_cache: dict[str, tuple[str, bool]]
+    recipes_changes: int = 0
+    recipe_autosave_interval: int = 200
+    items_changes: int = 0
+    items_autosave_interval: int = 50
+    recipes_file: str = "cache/recipes.json"
+    items_file: str = "cache/items.json"
 
+    last_request: float = 0
+    request_cooldown: float = 0.5  # 0.5s is safe for this API
+    sleep_time: float = 1.0
+    retry_exponent: float = 2.0
+    local_only: bool = False
 
-def add_discovery(a: str, b: str, result: str):
-    try:
-        discoveries = json.load(open(discovery_file, 'r'))
-    except (IOError, ValueError):
-        discoveries = {}
+    def __init__(self):
+        self.recipes_cache = json.load(open(self.recipes_file, 'r'))
+        self.items_cache = json.load(open(self.items_file, 'r'))
+        atexit.register(lambda: save_json(self.recipes_cache, self.recipes_file))
+        atexit.register(lambda: save_json(self.items_cache, self.items_file))
 
-    discoveries[result] = result_key(a, b)
-    json.dump(discoveries, open(discovery_file, 'w'))
+    def save_response(self, ingredient_1: str, ingredient_2: str, response: dict):
+        result = response['result']
+        emoji = response['emoji']
+        new = response['isNew']
 
+        # Items - emoji, new discovery
+        if result not in self.items_cache:
+            self.items_cache[result] = (emoji, new)
+            self.items_changes += 1
+            if self.items_changes % self.items_autosave_interval == 0:
+                print("Autosaving items file...")
+                save_json(self.items_cache, self.items_file)
 
-# Based on a stackoverflow post, forgot to write down which one
-def persist_to_file(file_name, key_func):
-    try:
-        resultsCache = json.load(open(file_name, 'r'))
-    except (IOError, ValueError):
-        resultsCache = {}
+        # Recipe: A + B --> C
+        if result_key(ingredient_1, ingredient_2) not in self.recipes_cache:
+            self.recipes_cache[result_key(ingredient_1, ingredient_2)] = result
+            self.recipes_changes += 1
+            if self.recipes_changes % self.recipe_autosave_interval == 0:
+                print("Autosaving recipes file...")
+                save_json(self.recipes_cache, self.recipes_file)
 
-    atexit.register(lambda: save(resultsCache, file_name))
+    def get_response(self, a: str, b: str) -> Optional[str]:
+        if result_key(a, b) not in self.recipes_cache:
+            return None
+        result = self.recipes_cache[result_key(a, b)]
+        if result not in self.items_cache:
+            # print(f"{result}!!")
+            # Didn't get the emoji. Useful for upgrading from a previous version.
+            return None
+        return result
 
-    def decorator(func):
-        def new_func(*args):
-            global changes, autosaveInterval, localOnly
+    # Adapted from analog_hors on Discord
+    def combine(self, a: str, b: str) -> str:
+        # Query local cache
+        local_result = self.get_response(a, b)
+        if local_result:
+            return local_result
+        elif self.local_only:
+            return "Nothing"
 
-            if key_func(*args) not in resultsCache:
-                # For viewing existing data only
-                if localOnly:
-                    return "Nothing"
-                resultsCache[key_func(*args)] = func(*args)
+        # with requestLock:
+        print(f"Requesting {a} + {b}", flush=True)
+        a = quote_plus(a)
+        b = quote_plus(b)
 
-                changes += 1
-                if changes % autosaveInterval == 0:
-                    print("Autosaving...")
-                    save(resultsCache, file_name)
+        # Don't request too quickly. Have been 429'd way too many times
+        t = time.perf_counter()
+        if (t - self.last_request) < self.request_cooldown:
+            time.sleep(self.request_cooldown - (t - self.last_request))
+        self.last_request = time.perf_counter()
 
-            return resultsCache[key_func(*args)]
-
-        return new_func
-
-    return decorator
-
-
-# Adapted from analog_hors on Discord
-@persist_to_file('cache/recipes.json', result_key)
-def combine(a: str, b: str) -> str:
-    global lastRequest, requestCooldown, changes, sleepTime, retryExponent
-
-    # with requestLock:
-    print(f"Requesting {a} + {b}", flush=True)
-    a = quote_plus(a)
-    b = quote_plus(b)
-
-    # Don't request too quickly. Have been 429'd way too many times
-    t = time.perf_counter()
-    if (t - lastRequest) < requestCooldown:
-        # print("Sleeping...", flush=True)
-        # print(f"Sleeping for {requestCooldown - (time.perf_counter() - lastRequest)} seconds", flush=True)
-        time.sleep(requestCooldown - (t - lastRequest))
-    lastRequest = time.perf_counter()
-
-    request = Request(
-        f"https://neal.fun/api/infinite-craft/pair?first={a}&second={b}",
-        headers={
-            "Referer": "https://neal.fun/infinite-craft/",
-            "User-Agent": "curl/7.54.1",
-        },
-    )
-    while True:
-        try:
-            with urlopen(request) as response:
-                # raise Exception(f"HTTP {response.getcode()}: {response.reason}")
-                r = json.load(response)
-                if r['isNew']:
-                    add_discovery(a, b, r['result'])
-                return r["result"]
-        except urllib.error.HTTPError:
-            time.sleep(sleepTime)
-            sleepTime *= retryExponent
-            print("Retrying...", flush=True)
-
-
-def merge_recipe_files(file1: str, file2: str, output: str):
-    try:
-        recipes1 = json.load(open(file1, 'r'))
-        recipes2 = json.load(open(file2, 'r'))
-    except (IOError, ValueError):
-        print("Could not load recipe files", flush=True)
-        return
-
-    for key in recipes2:
-        if key not in recipes1:
-            recipes1[key] = recipes2[key]
-
-    save(recipes1, output)
+        request = Request(
+            f"https://neal.fun/api/infinite-craft/pair?first={a}&second={b}",
+            headers={
+                "Referer": "https://neal.fun/infinite-craft/",
+                "User-Agent": "curl/7.54.1",
+            },
+        )
+        while True:
+            try:
+                with urlopen(request) as response:
+                    # raise Exception(f"HTTP {response.getcode()}: {response.reason}")
+                    r = json.load(response)
+                    self.save_response(a, b, r)
+                    return r["result"]
+            except urllib.error.HTTPError:
+                time.sleep(self.sleep_time)
+                self.sleep_time *= self.retry_exponent
+                print("Retrying...", flush=True)

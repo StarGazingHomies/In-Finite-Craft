@@ -7,3 +7,4 @@ recipes.txt
 pycache/*
 *.pyc
 *.txt
+*.json
