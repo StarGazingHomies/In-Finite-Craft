@@ -140,6 +140,23 @@ def merge_recipe_files(file1: str, file2: str, output: str):
     save(recipes1, output)
 
 
+def merge_items_files(file1: str, file2: str, output: str):
+    try:
+        items1 = json.load(open(file1, 'r'))
+        items2 = json.load(open(file2, 'r'))
+    except (IOError, ValueError):
+        print("Could not load items files", flush=True)
+        return
+
+    for key in items2:
+        if key not in items1:
+            items1[key] = items2[key]
+        if items2[key][1]:
+            items1[key] = items2[key]
+
+    save(items1, output)
+
+
 def best_recipes_to_json(recipe_file: str, output_file: str):
     try:
         with open(recipe_file, "r") as fin:
@@ -248,7 +265,38 @@ def change_delimiter(file: str, new_file: str):
         json.dump(new_recipes, f)
 
 
+def modify_save_file(file: str, items_file: str, new_file: str):
+    with open(file, "r", encoding='utf-8') as f:
+        data = json.load(f)
+    with open(items_file, "r", encoding='utf-8') as f:
+        items = json.load(f)
+
+    elements = data['elements']
+    new_data = {}
+    for i in elements:
+        print(i, i['text'])
+        new_data[i['text']] = i
+    for key, val in items.items():
+        if key in new_data:
+            new_data[key]['discovered'] = val[1] or new_data[key]['discovered']
+        new_data[key] = {
+            "text": key,
+            "emoji": val[0],
+            "discovered": val[1]
+        }
+
+    new_data_2 = {'elements': []}
+    for val in new_data.values():
+        new_data_2['elements'].append(val)
+    print(new_data_2)
+
+    with open(new_file, "w", encoding='utf-8') as f:
+        json.dump(new_data_2, f)
+
+
 if __name__ == '__main__':
     # merge_recipe_files("../cache/recipes.json", "../cache/recipes_search.json", "../cache/recipes_merged.json")
+    # merge_items_files("../cache/items.json", "../cache/items_search.json", "../cache/items_merged.json")
     # remove_plus_duplicates("../cache/recipes_merged.json", "../cache/recipes_trim.json")
-    change_delimiter("../cache/recipes_trim.json", "../cache/recipes_tab.json")
+    # change_delimiter("../cache/recipes_trim.json", "../cache/recipes_tab.json")
+    modify_save_file("../infinitecraft.json", "../cache/items.json", "../infinitecraft_modified.json")

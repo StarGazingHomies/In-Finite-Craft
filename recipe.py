@@ -1,19 +1,21 @@
 import atexit
 import json
 import os
-# import sys
+import sys
 import time
+import traceback
 import urllib.error
 # from multiprocessing import Lock
 from typing import Optional
 from urllib.parse import quote_plus, unquote_plus
 from urllib.request import Request, urlopen
 
-# Basically constants
+
 # requestLock: Lock = Lock()    # Multiprocessing - not implemented yet
 
 
 DELIMITER = "\t"
+WORD_TOKEN_LIMIT = 20
 
 
 def result_key(param1, param2):
@@ -23,7 +25,10 @@ def result_key(param1, param2):
 
 
 def load_json(file_name):
-    return json.load(open(file_name, 'r'))
+    try:
+        return json.load(open(file_name, 'r'))
+    except FileNotFoundError:
+        return {}
 
 
 def save_json(dictionary, file_name):
@@ -55,12 +60,13 @@ class RecipeHandler:
     last_request: float = 0
     request_cooldown: float = 0.5  # 0.5s is safe for this API
     sleep_time: float = 1.0
+    sleep_default: float = 1.0
     retry_exponent: float = 2.0
-    local_only: bool = False
+    local_only: bool = True
 
     def __init__(self):
-        self.recipes_cache = json.load(open(self.recipes_file, 'r'))
-        self.items_cache = json.load(open(self.items_file, 'r'))
+        self.recipes_cache = load_json(self.recipes_file)
+        self.items_cache = load_json(self.items_file)
         atexit.register(lambda: save_json(self.recipes_cache, self.recipes_file))
         atexit.register(lambda: save_json(self.items_cache, self.items_file))
 
@@ -69,6 +75,8 @@ class RecipeHandler:
         result = response['result']
         emoji = response['emoji']
         new = response['isNew']
+        if new:
+            print(f"FIRST DISCOVERY: {a} + {b} -> {result}")
         # print(result)
 
         # Items - emoji, new discovery
@@ -88,7 +96,7 @@ class RecipeHandler:
             print("Autosaving recipes file...")
             save_json(self.recipes_cache, self.recipes_file)
 
-    def get_response(self, a: str, b: str) -> Optional[str]:
+    def get_local(self, a: str, b: str) -> Optional[str]:
         if result_key(a, b) not in self.recipes_cache:
             return None
         result = self.recipes_cache[result_key(a, b)]
@@ -102,7 +110,7 @@ class RecipeHandler:
     # Adapted from analog_hors on Discord
     def combine(self, a: str, b: str) -> str:
         # Query local cache
-        local_result = self.get_response(a, b)
+        local_result = self.get_local(a, b)
         if local_result:
             return local_result
         elif self.local_only:
@@ -132,8 +140,18 @@ class RecipeHandler:
                     # raise Exception(f"HTTP {response.getcode()}: {response.reason}")
                     r = json.load(response)
                     self.save_response(a, b, r)
+                    # Reset exponential retrying
+                    self.sleep_time = self.sleep_default
                     return r["result"]
-            except urllib.error.HTTPError:
+            except urllib.error.HTTPError as e:
+                print(e, file=sys.stderr)
+                time.sleep(self.sleep_time)
+                self.sleep_time *= self.retry_exponent
+                print("Retrying...", flush=True)
+            except Exception as e:
+                # Handling more than just that one error
+                print("Unrecognized Error: ", e, file=sys.stderr)
+                traceback.print_exc()
                 time.sleep(self.sleep_time)
                 self.sleep_time *= self.retry_exponent
                 print("Retrying...", flush=True)

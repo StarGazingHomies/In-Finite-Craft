@@ -1,4 +1,4 @@
-# import time
+import time
 from functools import cache
 from typing import Optional
 
@@ -8,6 +8,7 @@ import recipe
 # import tracemalloc
 
 recipe_handler = recipe.RecipeHandler()
+init_state = ["Water", "Fire", "Wind", "Earth"]
 
 
 @cache
@@ -23,6 +24,13 @@ def int_to_pair(n: int) -> tuple[int, int]:
 
 
 @cache
+def pair_to_int(i: int, j: int) -> int:
+    if j < i:
+        i, j = j, i
+    return i + (j * (j + 1)) // 2
+
+
+@cache
 def limit(n: int) -> int:
     return n * (n + 1) // 2
 
@@ -31,12 +39,14 @@ class GameState:
     items: list[str]
     state: list[int]
     visited: list[set[str]]
+    used: list[bool]
     children: set[str]
 
-    def __init__(self, items: list[str], state: list[int], children: set[str]):
+    def __init__(self, items: list[str], state: list[int], children: set[str], used: list[bool]):
         self.state = state
         self.items = items
         self.children = children
+        self.used = used
 
     def __str__(self):
         steps = [self.items[-1] + ":"]
@@ -67,11 +77,21 @@ class GameState:
                 craft_result in self.items or
                 craft_result in self.children):
             return None
+
+        # If we are limited by depth, we aren't going to check for children,
+        # because any pairing here would be valid!
         self.children.add(craft_result)
 
         new_state = self.state + [i]
         new_items = self.items + [craft_result]
-        return GameState(new_items, new_state, self.children.copy())
+        new_used = self.used.copy()
+        new_used.append(False)
+        new_used[u] = True
+        new_used[v] = True
+        return GameState(new_items, new_state, self.children.copy(), new_used)
+
+    def unused_items(self) -> list[int]:
+        return [i for i in range(len(init_state), len(self.items)) if not self.used[i]]
 
     def tail_item(self) -> str:
         return self.items[-1]
@@ -93,80 +113,106 @@ def process_node(state: GameState):
         # best_recipes[state.tail_item()] = str(state)
 
 
+# Depth limited search
 def dls(state: GameState, depth: int):
     if depth == 0:
         process_node(state)
         return 1
-    lower_limit = 0
-    if depth == 1 and state.tail_index() != -1:
-        lower_limit = limit(len(state) - 1)
 
-    count = 0
-    for i in range(lower_limit, limit(len(state))):
-        child = state.child(i)
-        if child is not None:
-            count += dls(child, depth - 1)
+    # Remove states with overly long words w/ lots of tokens
+    # I'm nowhere near that token limit though
 
-    return count
+    count = 0  # States counter
+
+    # Use unused items
+    unused_items = state.unused_items()
+    if len(unused_items) > depth + 1:
+        # Impossible to use all elements, since we have too few crafts left
+        return 0
+    elif len(unused_items) > depth:
+        # We must start using unused elements NOW.
+        for j in range(len(unused_items)):  # For loop ordering is important. We want increasing pair_to_int order.
+            for i in range(j):              # i != j
+                child = state.child(pair_to_int(unused_items[i], unused_items[j]))
+                if child is not None:
+                    count += dls(child, depth - 1)
+        return count
+    else:
+        # Must use the 2nd last element
+        lower_limit = 0
+        if depth == 1 and state.tail_index() != -1:
+            lower_limit = limit(len(state) - 1)
+
+        # Regular ol' searching
+        for i in range(lower_limit, limit(len(state))):
+            child = state.child(i)
+            if child is not None:
+                count += dls(child, depth - 1)
+
+        return count
 
 
 def iterative_deepening_dfs():
     open(best_recipes_file, "w").close()
 
-    init_state = ["Water", "Fire", "Wind", "Earth"]
-
     curDepth = 1
 
-    # start_time = time.perf_counter()
+    start_time = time.perf_counter()
 
     # Recipe Analysis
 
-    # with open("best_recipes_11k.txt", "r") as fin:
-    #     lines = fin.readlines()
-    #
-    # recipes = []
-    # cur_recipe = ""
-    # for line in lines:
-    #     if line.strip() == "":
-    #         output = cur_recipe.split(":")[1].strip()
-    #         recipes.append(cur_recipe.split(":", 2)[2])
-    #         try:
-    #             num = int(output)
-    #             # print(num, end=", ")
-    #             print(num, cur_recipe.split(":", 2)[2])
-    #             # print(flush=True)
-    #         except ValueError:
-    #             pass
-    #         finally:
-    #             cur_recipe = ""
-    #
-    #     else:
-    #         cur_recipe += line
+    with open("best_recipes_depth_9.txt", "r", encoding='utf-8') as fin:
+        lines = fin.readlines()
+
+    recipes = [set() for _ in range(10)]
+    cur_recipe = ""
+    cur_recipe_depth = -1
+    for line in lines:
+        if line.strip() == "":
+            output = cur_recipe.split(":")[1].strip()
+            recipes[cur_recipe_depth].add(output)
+
+            cur_recipe = ""
+            cur_recipe_depth = -1
+        else:
+            cur_recipe += line
+            cur_recipe_depth += 1
+    sizes = [len(x) for x in recipes]
     # print(recipes)
-    # return
+    print([sum(sizes[:i+1]) for i in range(1, len(sizes))])
 
     while True:
         # prev_visited = len(visited)
-        dls(
+        print(dls(
             GameState(
                 init_state,
                 [-1 for _ in range(len(init_state))],
-                set()),
-            curDepth)
+                set(),
+                [False for _ in range(len(init_state))]
+            ),
+            curDepth))
 
-        print(len(visited))
-        # if curDepth == 8:
-        #     break
-        # Only relevant for local files - if exhausted the outputs, stop
-        # if len(visited) == prev_visited:
-        #     break
+        # print(len(visited))
+        #
+        # for i in range(curDepth + 1):
+        #     for v in recipes[i]:
+        #         if v not in visited:
+        #             print(f"Missing {v} at depth {i}")
+
 
         # Performance
         # current, peak = tracemalloc.get_traced_memory()
         # print(f"Current memory usage is {current / 2**20}MB; Peak was {peak / 2**20}MB")
         # print(f"Current time elapsed: {time.perf_counter() - start_time:.4f}")
         # print("Completed depth: ", curDepth)
+        print(f"{curDepth}   {len(visited)}     {time.perf_counter() - start_time:.4f}")
         # print(flush=True)
+        if curDepth == 9:
+            break
+        # Only relevant for local files - if exhausted the outputs, stop
+        # if len(visited) == prev_visited:
+        #     break
+
         curDepth += 1
 
 

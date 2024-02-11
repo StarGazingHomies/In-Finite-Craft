@@ -8,11 +8,36 @@ i9-13950HX,
 128GB RAM
 
 
+## Version 1.3
+
+This will try and implement a better version of unused result tracking. (Idea 3)
+If there are too many unused results, then the branch is pruned.
+If there's a little less, then the branch goes into desperation
+and starts using only unused element pairs. This should be correct, and
+up to depth 9 it gets the same amount of recipes as before.
+
+Do note that the parity of depth has some impact on the number of states.
+
+                                 OLD           |         NEW
+    DEPTH   |   SIZE   |   TIME   |   STATES   |   TIME   |   STATES   |  
+      1           10       0.0015         10       0.030          10
+      2           29       0.0039         29       0.031          29
+      3           81       0.0109        226       0.036         113
+      4          211       0.0316       1578       0.045         414
+      5          486       0.0966      10463       0.095        1642
+      6         1114       0.4327      70560       0.229        7822
+      7         2682       2.6203     503132       0.812       39284
+      8         6566      19.3702    3844983       3.871      209607
+      9        17045     163.8879   31438265      21.261     1191681
+
+
 ## Version 1.2.2
 
 
 A lot of code cleanup, especially in the `recipe.py` file.
 Also added item emoji saving.
+(Last update was a delimiter change. In the future maybe I'll make it
+2 dict layers for completely unicode safety. No one has made \t yet probably.)
 
 
 ## Version 1.2.1
