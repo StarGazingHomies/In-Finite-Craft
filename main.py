@@ -4,11 +4,11 @@ from typing import Optional
 
 import recipe
 
-
 # import tracemalloc
 
 recipe_handler = recipe.RecipeHandler()
-init_state = ["Water", "Fire", "Wind", "Earth"]
+init_state: tuple[str, ...] = ("Water", "Fire", "Wind", "Earth")
+                               # "Steam", "Smoke", "Engine", "Fog", "Tractor", "Tractor Beam", "Laser", "Ghost",  "Hologram", "Hologhost")
 
 
 @cache
@@ -36,9 +36,9 @@ def limit(n: int) -> int:
 
 
 class GameState:
-    items: list[str]
-    state: list[int]
-    visited: list[set[str]]
+    items: list[str, ...]
+    state: list[int, ...]
+    visited: list[set[str], ...]
     used: list[bool]
     children: set[str]
 
@@ -67,23 +67,27 @@ class GameState:
         return hash(str(self.state))
 
     def child(self, i: int) -> Optional['GameState']:
-        if i <= self.state[-1] or i >= limit(len(self)):
+        # Invalid indices
+        if i <= self.tail_index() or i >= limit(len(self)):
             return None
 
+        # Craft the items
         u, v = int_to_pair(i)
         craft_result = recipe_handler.combine(self.items[u], self.items[v])
+
+        # Invalid crafts, items we already have, or items that can be crafted earlier are ignored.
         if (craft_result is None or
                 craft_result == "Nothing" or
                 craft_result in self.items or
                 craft_result in self.children):
             return None
 
-        # If we are limited by depth, we aren't going to check for children,
-        # because any pairing here would be valid!
+        # Make sure we never craft this ever again
         self.children.add(craft_result)
 
-        new_state = self.state + [i]
-        new_items = self.items + [craft_result]
+        # Construct the new state
+        new_state = self.state + [i,]
+        new_items = self.items + [craft_result,]
         new_used = self.used.copy()
         new_used.append(False)
         new_used[u] = True
@@ -93,6 +97,9 @@ class GameState:
     def unused_items(self) -> list[int]:
         return [i for i in range(len(init_state), len(self.items)) if not self.used[i]]
 
+    def items_set(self) -> frozenset[str]:
+        return frozenset(self.items)
+
     def tail_item(self) -> str:
         return self.items[-1]
 
@@ -100,51 +107,61 @@ class GameState:
         return self.state[-1]
 
 
-# best_recipes: dict[str] = dict()
+best_recipes: dict[str, list[GameState]] = dict()
 visited = set()
+best_depths: dict[str, int] = dict()
 best_recipes_file: str = "best_recipes.txt"
+all_best_recipes_file: str = "all_best_recipes_depth_9.txt"
 
 
 def process_node(state: GameState):
     if state.tail_item() not in visited:
         visited.add(state.tail_item())
+        #  Dumb writing to file
         with open(best_recipes_file, "a", encoding="utf-8") as file:
             file.write(str(len(visited)) + ": " + str(state) + "\n\n")
-        # best_recipes[state.tail_item()] = str(state)
+    # Multiple recipes for the same item at same depth
+    # depth = len(state) - len(init_state)
+    # if state.tail_item() not in best_depths:
+    #     best_depths[state.tail_item()] = depth
+    #     best_recipes[state.tail_item()] = [state,]
+    # elif depth == best_depths[state.tail_item()]:
+    #     best_recipes[state.tail_item()].append(state)
 
 
 # Depth limited search
-def dls(state: GameState, depth: int):
-    if depth == 0:
+def dls(state: GameState, depth: int) -> int:
+    """
+    Depth limited search
+    :param state: The current state
+    :param depth: The depth remaining
+    :return: The number of states processed
+    """
+    if depth == 0:                          # We've reached the end of the crafts, process the node
         process_node(state)
         return 1
 
-    # Remove states with overly long words w/ lots of tokens
+    # In the future, remove states with overly long words w/ lots of tokens
     # I'm nowhere near that token limit though
 
     count = 0  # States counter
-
-    # Use unused items
-    unused_items = state.unused_items()
-    if len(unused_items) > depth + 1:
-        # Impossible to use all elements, since we have too few crafts left
+    unused_items = state.unused_items()     # Unused items
+    if len(unused_items) > depth + 1:       # Impossible to use all elements, since we have too few crafts left
         return 0
-    elif len(unused_items) > depth:
-        # We must start using unused elements NOW.
+    elif len(unused_items) > depth:         # We must start using unused elements NOW.
         for j in range(len(unused_items)):  # For loop ordering is important. We want increasing pair_to_int order.
-            for i in range(j):              # i != j
+            for i in range(j):              # i != j. We have to use two for unused_items to decrease.
                 child = state.child(pair_to_int(unused_items[i], unused_items[j]))
                 if child is not None:
                     count += dls(child, depth - 1)
         return count
+    # TODO: elif len(unused_items) == depth might be a useful pruning case. Not gonna bother right now.
     else:
-        # Must use the 2nd last element
         lower_limit = 0
-        if depth == 1 and state.tail_index() != -1:
+        if depth == 1 and state.tail_index() != -1:      # Must use the 2nd last element, if it's not a default item.
             lower_limit = limit(len(state) - 1)
 
-        # Regular ol' searching
-        for i in range(lower_limit, limit(len(state))):
+        for i in range(lower_limit, limit(len(state))):  # Regular ol' searching
             child = state.child(i)
             if child is not None:
                 count += dls(child, depth - 1)
@@ -161,31 +178,31 @@ def iterative_deepening_dfs():
 
     # Recipe Analysis
 
-    with open("best_recipes_depth_9.txt", "r", encoding='utf-8') as fin:
-        lines = fin.readlines()
-
-    recipes = [set() for _ in range(10)]
-    cur_recipe = ""
-    cur_recipe_depth = -1
-    for line in lines:
-        if line.strip() == "":
-            output = cur_recipe.split(":")[1].strip()
-            recipes[cur_recipe_depth].add(output)
-
-            cur_recipe = ""
-            cur_recipe_depth = -1
-        else:
-            cur_recipe += line
-            cur_recipe_depth += 1
-    sizes = [len(x) for x in recipes]
-    # print(recipes)
-    print([sum(sizes[:i+1]) for i in range(1, len(sizes))])
+    # with open("best_recipes_depth_9.txt", "r", encoding='utf-8') as fin:
+    #     lines = fin.readlines()
+    #
+    # recipes = [set() for _ in range(10)]
+    # cur_recipe = ""
+    # cur_recipe_depth = -1
+    # for line in lines:
+    #     if line.strip() == "":
+    #         output = cur_recipe.split(":")[1].strip()
+    #         recipes[cur_recipe_depth].add(output)
+    #
+    #         cur_recipe = ""
+    #         cur_recipe_depth = -1
+    #     else:
+    #         cur_recipe += line
+    #         cur_recipe_depth += 1
+    # sizes = [len(x) for x in recipes]
+    # # print(recipes)
+    # print([sum(sizes[:i+1]) for i in range(1, len(sizes))])
 
     while True:
         # prev_visited = len(visited)
         print(dls(
             GameState(
-                init_state,
+                list(init_state),
                 [-1 for _ in range(len(init_state))],
                 set(),
                 [False for _ in range(len(init_state))]
@@ -199,21 +216,31 @@ def iterative_deepening_dfs():
         #         if v not in visited:
         #             print(f"Missing {v} at depth {i}")
 
-
         # Performance
         # current, peak = tracemalloc.get_traced_memory()
         # print(f"Current memory usage is {current / 2**20}MB; Peak was {peak / 2**20}MB")
         # print(f"Current time elapsed: {time.perf_counter() - start_time:.4f}")
         # print("Completed depth: ", curDepth)
         print(f"{curDepth}   {len(visited)}     {time.perf_counter() - start_time:.4f}")
+        # print(best_recipes)
         # print(flush=True)
         if curDepth == 9:
             break
         # Only relevant for local files - if exhausted the outputs, stop
         # if len(visited) == prev_visited:
         #     break
-
         curDepth += 1
+
+    # with open(all_best_recipes_file, "w", encoding="utf-8") as file:
+    #     for key, value in best_recipes.items():
+    #         # print(f"{key} has {len(value)} distinct minimal recipes")
+    #         file.write(f"{key} has {len(value)} distinct minimal recipes:\n")
+    #         for r in value:
+    #             items = list(r.items_set())
+    #             items.sort()
+    #             file.write("\n{" + ", ".join(items) + "} -> " + str(r) + "\n")
+    #
+    #         file.write("\n-----------------------------------------------\n")
 
 
 def main():

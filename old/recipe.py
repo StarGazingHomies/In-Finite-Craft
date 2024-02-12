@@ -23,8 +23,8 @@ items_file = "../cache/items.json"
 
 def result_key(param1, param2):
     if param1 > param2:
-        return param2 + " + " + param1
-    return param1 + " + " + param2
+        return param2 + "\t" + param1
+    return param1 + "\t" + param2
 
 
 def save(dictionary, file_name):
@@ -294,9 +294,22 @@ def modify_save_file(file: str, items_file: str, new_file: str):
         json.dump(new_data_2, f)
 
 
+def count_recipes(file: str):
+    with open(file, "r") as f:
+        recipes = json.load(f)
+    print(len(recipes))
+
+
+def combine_optimally(current: set[str], future: list[list[set[str]]]):
+    pass
+
+
 if __name__ == '__main__':
+    count_recipes("../cache/recipes.json")
+    # best_recipes_to_json("../best_recipes_depth_9.txt", "../relevant_recipes.json")
+    # remove_new("../cache/items.json", "../cache/emojis.json")
     # merge_recipe_files("../cache/recipes.json", "../cache/recipes_search.json", "../cache/recipes_merged.json")
     # merge_items_files("../cache/items.json", "../cache/items_search.json", "../cache/items_merged.json")
     # remove_plus_duplicates("../cache/recipes_merged.json", "../cache/recipes_trim.json")
     # change_delimiter("../cache/recipes_trim.json", "../cache/recipes_tab.json")
-    modify_save_file("../infinitecraft.json", "../cache/items.json", "../infinitecraft_modified.json")
+    # modify_save_file("../infinitecraft.json", "../cache/items.json", "../infinitecraft_modified.json")
