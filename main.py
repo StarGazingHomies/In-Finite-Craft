@@ -8,6 +8,7 @@ import recipe
 
 recipe_handler = recipe.RecipeHandler()
 init_state: tuple[str, ...] = ("Water", "Fire", "Wind", "Earth")
+# init_state: tuple[str, ...] = ('Dandelion', 'Wine')
                                # "Steam", "Smoke", "Engine", "Fog", "Tractor", "Tractor Beam", "Laser", "Ghost",  "Hologram", "Hologhost")
 
 
@@ -224,8 +225,8 @@ def iterative_deepening_dfs():
         print(f"{curDepth}   {len(visited)}     {time.perf_counter() - start_time:.4f}")
         # print(best_recipes)
         # print(flush=True)
-        if curDepth == 9:
-            break
+        # if curDepth == 9:
+        #     break
         # Only relevant for local files - if exhausted the outputs, stop
         # if len(visited) == prev_visited:
         #     break

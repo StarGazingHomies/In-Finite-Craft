@@ -62,11 +62,20 @@ class RecipeHandler:
     sleep_time: float = 1.0
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
-    local_only: bool = True
+    local_only: bool = False
+    trust_cache_nothing: bool = True     # Trust the local cache for "Nothing" results
+    nothing_verification: int = 3        # Verify "Nothing" n times with the API
+    nothing_cooldown: float = 1.0        # Cooldown between "Nothing" verifications
 
     def __init__(self):
         self.recipes_cache = load_json(self.recipes_file)
         self.items_cache = load_json(self.items_file)
+        if not self.trust_cache_nothing:
+            l = frozenset(self.recipes_cache.items())
+            for ingredients, result in l:
+                if result == "Nothing":
+                    self.recipes_cache.pop(ingredients)
+
         atexit.register(lambda: save_json(self.recipes_cache, self.recipes_file))
         atexit.register(lambda: save_json(self.items_cache, self.items_file))
 
@@ -75,6 +84,7 @@ class RecipeHandler:
         result = response['result']
         emoji = response['emoji']
         new = response['isNew']
+        print(f"New Recipe: {a} + {b} -> {result}")
         if new:
             print(f"FIRST DISCOVERY: {a} + {b} -> {result}")
         # print(result)
@@ -116,8 +126,23 @@ class RecipeHandler:
         elif self.local_only:
             return "Nothing"
 
+        # print(f"Requesting {a} + {b}", flush=True)
+        result = self.request_pair(a, b)
+        nothing_count = 1
+        while result['result'] == "Nothing" and nothing_count < self.nothing_verification:
+            # Request again to verify, just in case...
+            # Increases time taken on requests but should be worth it.
+            # Also note that this can't be asynchronous due to all the optimizations I made assuming a search order
+            time.sleep(self.nothing_cooldown)
+            print("Re-requesting Nothing result...", flush=True)
+            result = self.request_pair(a, b)
+            nothing_count += 1
+
+        self.save_response(a, b, result)
+        return result['result']
+
+    def request_pair(self, a: str, b: str) -> dict[str, str]:
         # with requestLock:
-        print(f"Requesting {a} + {b}", flush=True)
         a_req = quote_plus(a)
         b_req = quote_plus(b)
 
@@ -139,10 +164,9 @@ class RecipeHandler:
                 with urlopen(request) as response:
                     # raise Exception(f"HTTP {response.getcode()}: {response.reason}")
                     r = json.load(response)
-                    self.save_response(a, b, r)
                     # Reset exponential retrying
                     self.sleep_time = self.sleep_default
-                    return r["result"]
+                    return r
             except urllib.error.HTTPError as e:
                 print(e, file=sys.stderr)
                 time.sleep(self.sleep_time)

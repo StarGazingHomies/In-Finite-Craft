@@ -8,6 +8,15 @@ i9-13950HX,
 128GB RAM
 
 
+## Version 1.3.1
+
+Added a double check for Nothing results, some other "Nothing" options,
+and also the code that produces all the minimal recipes for each item.
+
+Note that the verification requests can't be asynchronous because the algorithm
+depends on the search ordering, and loosening the ordering restriction means
+(intuitively) significantly* more compute for my old laptop it's hosted on.
+
 ## Version 1.3
 
 This will try and implement a better version of unused result tracking. (Idea 3)

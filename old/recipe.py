@@ -136,6 +136,10 @@ def merge_recipe_files(file1: str, file2: str, output: str):
     for key in recipes2:
         if key not in recipes1:
             recipes1[key] = recipes2[key]
+        if key in recipes1 and recipes2[key] != recipes1[key]:
+            print(f"Conflict: {key} -> {recipes1[key]} vs {recipes2[key]}")
+            if recipes1[key] == "Nothing":
+                recipes1[key] = recipes2[key]
 
     save(recipes1, output)
 
@@ -257,7 +261,7 @@ def change_delimiter(file: str, new_file: str):
     new_recipes = {}
     for key, value in recipes.items():
         if key.count(" + ") > 1:
-            continue # Sorry, but re-request
+            continue  # Sorry, but re-request
         u, v = key.split(" + ")
         new_recipes[u + "\t" + v] = value
 
@@ -300,16 +304,40 @@ def count_recipes(file: str):
     print(len(recipes))
 
 
-def combine_optimally(current: set[str], future: list[list[set[str]]]):
-    pass
+def load_analog_hors_json(file_name):
+    try:
+        db = json.load(open(file_name, 'r'))
+    except FileNotFoundError:
+        return {}
+
+    new_db = {}
+    for key, value in db.items():
+        for u, v in value:
+            new_db[result_key(u, v)] = key
+    return new_db
+
+
+def check_recipes(file: str, db: dict[str, str]):
+    with open(file) as f:
+        recipes = json.load(f)
+
+    for key, value in recipes.items():
+        if key not in db:
+            continue
+        if db[key] != value:
+            key_str = key.replace('\t', ' + ')
+            if "Nothing" == value or "Nothing" == db[key]:
+                print(f"Conflict: {key_str} -> (stargazing) {value} vs (analog_hors) {db[key]}")
 
 
 if __name__ == '__main__':
-    count_recipes("../cache/recipes.json")
-    # best_recipes_to_json("../best_recipes_depth_9.txt", "../relevant_recipes.json")
+    # count_recipes("../cache/recipes.json")
+    # print(load_analog_hors_json("../cache/db.json"))
+    # check_recipes("../cache/recipes.json", load_analog_hors_json("../cache/db.json"))
+    # best_recipes_to_json("../best_recipes.txt", "../relevant_recipes.json")
     # remove_new("../cache/items.json", "../cache/emojis.json")
-    # merge_recipe_files("../cache/recipes.json", "../cache/recipes_search.json", "../cache/recipes_merged.json")
-    # merge_items_files("../cache/items.json", "../cache/items_search.json", "../cache/items_merged.json")
+    merge_recipe_files("../cache/recipes.json", "../cache/recipes_search.json", "../cache/recipes_merged.json")
+    merge_items_files("../cache/items.json", "../cache/items_search.json", "../cache/items_merged.json")
     # remove_plus_duplicates("../cache/recipes_merged.json", "../cache/recipes_trim.json")
     # change_delimiter("../cache/recipes_trim.json", "../cache/recipes_tab.json")
     # modify_save_file("../infinitecraft.json", "../cache/items.json", "../infinitecraft_modified.json")
