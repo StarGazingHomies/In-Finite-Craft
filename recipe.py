@@ -118,7 +118,7 @@ class RecipeHandler:
                 save_json(self.items_cache, self.items_file)
 
         # Save as the fake nothing if it's the first run
-        if result == "Nothing" and not self.trust_first_run_nothing:
+        if result == "Nothing" and result not in self.recipes_cache and self.trust_first_run_nothing:
             result = self.local_nothing_indication
 
         # Recipe: A + B --> C

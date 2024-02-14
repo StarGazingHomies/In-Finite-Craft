@@ -1,14 +1,6 @@
-import atexit
 import json
 import os
-import sys
-import time
-import urllib.error
-from multiprocessing import Lock
-from urllib.parse import quote_plus
-from urllib.request import Request, urlopen
 from recipe import result_key
-
 
 
 def save(dictionary, file_name):
@@ -220,7 +212,7 @@ def convert_to_result_first(file_name):
     return new_recipes
 
 
-def check_recipes(file: str, db: dict[str, str]):
+def check_crafts(file: str, db: dict[str, str]):
     with open(file) as f:
         recipes = json.load(f)
 
@@ -233,9 +225,43 @@ def check_recipes(file: str, db: dict[str, str]):
                 print(f"Conflict: {key_str} -> (stargazing) {value} vs (analog_hors) {db[key]}")
 
 
+def load_best_recipe_book(file: str) -> list[set]:
+    with open(file, "r", encoding='utf-8') as fin:
+        lines = fin.readlines()
+
+    recipes = [set() for _ in range(11)]
+    cur_recipe = ""
+    cur_recipe_depth = -1
+    for line in lines:
+        if line.strip() == "":
+            output = cur_recipe.split(":")[1].strip()
+            recipes[cur_recipe_depth].add(output)
+
+            cur_recipe = ""
+            cur_recipe_depth = -1
+        else:
+            cur_recipe += line
+            cur_recipe_depth += 1
+    sizes = [len(x) for x in recipes]
+    print([sum(sizes[:i + 1]) for i in range(1, len(sizes))])
+    return recipes
+
+
+def check_recipes(file1, file2):
+    recipe_book1 = load_best_recipe_book(file1)
+    recipe_book2 = load_best_recipe_book(file2)
+    for i in range(10):
+        for v in recipe_book1[i]:
+            if v not in recipe_book2[i]:
+                print(f"Missing {v} at depth {i} in 2nd book")
+        for v in recipe_book2[i]:
+            if v not in recipe_book1[i]:
+                print(f"Missing {v} at depth {i} in 1st book")
+
+
 if __name__ == '__main__':
-    new_recipes = convert_to_result_first("cache/v9.4/recipes_v9.4 nothing pruning.json")
-    save(new_recipes, "cache/v9.4/recipes_v9.4 nothing pruning result first.json")
+    # new_recipes = convert_to_result_first("cache/v9.4/recipes_v9.4 nothing pruning.json")
+    # save(new_recipes, "cache/v9.4/recipes_v9.4 nothing pruning result first.json")
     # for recipe in new_recipes["Sisyphus"]:
     #     u, v = recipe.split('\t')
     #     print(f"{u} + {v}, ", end = "")
@@ -245,7 +271,8 @@ if __name__ == '__main__':
     #     print(txt.count("Nothing"))
     # count_recipes("../cache/recipes.json")
     # print(load_analog_hors_json("../cache/db.json"))
-    # check_recipes("../cache/recipes.json", load_analog_hors_json("../cache/db.json"))
+    # check_crafts("../cache/recipes.json", load_analog_hors_json("../cache/db.json"))
+    check_recipes("best_recipes_depth_9_v1.txt", "best_recipes_depth_9_v2.txt")
     # best_recipes_to_json("../best_recipes.txt", "../relevant_recipes.json")
     # remove_new("../cache/items.json", "../cache/emojis.json")
     # merge_recipe_files("../cache/recipes.json", "../cache/recipes_search.json", "../cache/recipes_merged.json")
