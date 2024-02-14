@@ -143,9 +143,9 @@ class RecipeHandler:
         # print(f"Requesting {a} + {b}", flush=True)
         with self.request_pair(a, b) as result:
             r = json.load(result)
-            last_result = result.__dict__
-            last_result['headers'] = str(last_result['headers'].__dict__)
-            last_r = r
+            # last_result = result.__dict__
+            # last_result['headers'] = str(last_result['headers'].__dict__)
+            # last_r = r
 
         nothing_count = 1
         while r['result'] == "Nothing" and nothing_count < self.nothing_verification:
@@ -157,13 +157,13 @@ class RecipeHandler:
 
             with self.request_pair(a, b) as result:
                 r = json.load(result)
-                if (r['result'] != "Nothing") and (r['result'] != last_r['result']):
-                    print(f"WARNING: Inconsistent Nothing result: {last_r['result']} -> {r['result']}")
-                    # Save the full Nothing response to a different file
-                    save_nothing(a, b, {"Resp": last_result,
-                                        "Result": last_r})
-                last_result = result.__dict__
-                last_r = r
+                # if (r['result'] != "Nothing") and (r['result'] != last_r['result']):
+                #     print(f"WARNING: Inconsistent Nothing result: {last_r['result']} -> {r['result']}")
+                #     # Save the full Nothing response to a different file
+                #     save_nothing(a, b, {"Resp": last_result,
+                #                         "Result": last_r})
+                # last_result = result.__dict__
+                # last_r = r
 
             nothing_count += 1
 
