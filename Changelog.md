@@ -7,6 +7,8 @@ All benchmarks are ran on a personal system with the following specs:
 i9-13950HX,
 128GB RAM
 
+Note that power settings and the like can change between versions, so results
+are not comparable between them.
 
 ## Version 1.3.1
 
@@ -16,6 +18,10 @@ and also the code that produces all the minimal recipes for each item.
 Note that the verification requests can't be asynchronous because the algorithm
 depends on the search ordering, and loosening the ordering restriction means
 (intuitively) significantly* more compute for my old laptop it's hosted on.
+
+Also, note that depth 8 actually has at least 6568 recipes, and depth 9 has
+at least 17065. I have been using incorrect cached data for benchmarks
+because network requests are unreliable.
 
 ## Version 1.3
 

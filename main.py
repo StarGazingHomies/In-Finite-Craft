@@ -8,8 +8,13 @@ import recipe
 
 recipe_handler = recipe.RecipeHandler()
 init_state: tuple[str, ...] = ("Water", "Fire", "Wind", "Earth")
+                               # "Lake", "Lava", "Stone", "Rock", "Lighthouse", "Hermit", "Sphinx", "Oedpius",
+                               # "Oedipus Rex", "Sophocles")
 # init_state: tuple[str, ...] = ('Dandelion', 'Wine')
                                # "Steam", "Smoke", "Engine", "Fog", "Tractor", "Tractor Beam", "Laser", "Ghost",  "Hologram", "Hologhost")
+
+
+# Math, Number, Reality or Vacuum
 
 
 @cache
@@ -40,10 +45,10 @@ class GameState:
     items: list[str, ...]
     state: list[int, ...]
     visited: list[set[str], ...]
-    used: list[bool]
+    used: list[int]
     children: set[str]
 
-    def __init__(self, items: list[str], state: list[int], children: set[str], used: list[bool]):
+    def __init__(self, items: list[str], state: list[int], children: set[str], used: list[int]):
         self.state = state
         self.items = items
         self.children = children
@@ -90,13 +95,13 @@ class GameState:
         new_state = self.state + [i,]
         new_items = self.items + [craft_result,]
         new_used = self.used.copy()
-        new_used.append(False)
-        new_used[u] = True
-        new_used[v] = True
+        new_used.append(0)
+        new_used[u] += 1
+        new_used[v] += 1
         return GameState(new_items, new_state, self.children.copy(), new_used)
 
     def unused_items(self) -> list[int]:
-        return [i for i in range(len(init_state), len(self.items)) if not self.used[i]]
+        return [i for i in range(len(init_state), len(self.items)) if 0 == self.used[i]]
 
     def items_set(self) -> frozenset[str]:
         return frozenset(self.items)
@@ -200,13 +205,13 @@ def iterative_deepening_dfs():
     # print([sum(sizes[:i+1]) for i in range(1, len(sizes))])
 
     while True:
-        # prev_visited = len(visited)
+        prev_visited = len(visited)
         print(dls(
             GameState(
                 list(init_state),
                 [-1 for _ in range(len(init_state))],
                 set(),
-                [False for _ in range(len(init_state))]
+                [0 for _ in range(len(init_state))]
             ),
             curDepth))
 
@@ -225,11 +230,11 @@ def iterative_deepening_dfs():
         print(f"{curDepth}   {len(visited)}     {time.perf_counter() - start_time:.4f}")
         # print(best_recipes)
         # print(flush=True)
-        # if curDepth == 9:
+        # if curDepth == 10:
         #     break
         # Only relevant for local files - if exhausted the outputs, stop
-        # if len(visited) == prev_visited:
-        #     break
+        if len(visited) == prev_visited:
+            break
         curDepth += 1
 
     # with open(all_best_recipes_file, "w", encoding="utf-8") as file:

@@ -10,6 +10,7 @@ from typing import Optional
 from urllib.parse import quote_plus, unquote_plus
 from urllib.request import Request, urlopen
 
+from urllib3 import HTTPResponse
 
 # requestLock: Lock = Lock()    # Multiprocessing - not implemented yet
 
@@ -65,7 +66,7 @@ class RecipeHandler:
     local_only: bool = False
     trust_cache_nothing: bool = True     # Trust the local cache for "Nothing" results
     nothing_verification: int = 3        # Verify "Nothing" n times with the API
-    nothing_cooldown: float = 1.0        # Cooldown between "Nothing" verifications
+    nothing_cooldown: float = 5.0        # Cooldown between "Nothing" verifications
 
     def __init__(self):
         self.recipes_cache = load_json(self.recipes_file)
@@ -117,6 +118,13 @@ class RecipeHandler:
             return None
         return result
 
+    def save_nothing(self, a: str, b: str, response: dict):
+        file_name = f"cache/nothing/{a}+{b}.json"
+        if not os.path.exists(file_name):
+            os.mkdir("cache/nothing")
+        with open(file_name, 'w') as file:
+            json.dump(response, file)
+
     # Adapted from analog_hors on Discord
     def combine(self, a: str, b: str) -> str:
         # Query local cache
@@ -127,21 +135,29 @@ class RecipeHandler:
             return "Nothing"
 
         # print(f"Requesting {a} + {b}", flush=True)
-        result = self.request_pair(a, b)
+        r = self.request_pair(a, b)
         nothing_count = 1
-        while result['result'] == "Nothing" and nothing_count < self.nothing_verification:
+        while r['result'] == "Nothing" and nothing_count < self.nothing_verification:
             # Request again to verify, just in case...
             # Increases time taken on requests but should be worth it.
             # Also note that this can't be asynchronous due to all the optimizations I made assuming a search order
             time.sleep(self.nothing_cooldown)
             print("Re-requesting Nothing result...", flush=True)
-            result = self.request_pair(a, b)
+            last_r = r
+
+            r = self.request_pair(a, b)
+
+            if (r['result'] != "Nothing") and (r['result'] != last_r['result']):
+                print(f"WARNING: Inconsistent Nothing result: {last_r['result']} -> {r['result']}")
+                # Save the full Nothing response to a different file
+                self.save_nothing(a, b, last_r)
+
             nothing_count += 1
 
-        self.save_response(a, b, result)
-        return result['result']
+        self.save_response(a, b, r)
+        return r['result']
 
-    def request_pair(self, a: str, b: str) -> dict[str, str]:
+    def request_pair(self, a: str, b: str) -> HTTPResponse:
         # with requestLock:
         a_req = quote_plus(a)
         b_req = quote_plus(b)
@@ -163,10 +179,9 @@ class RecipeHandler:
             try:
                 with urlopen(request) as response:
                     # raise Exception(f"HTTP {response.getcode()}: {response.reason}")
-                    r = json.load(response)
                     # Reset exponential retrying
                     self.sleep_time = self.sleep_default
-                    return r
+                    return json.load(response)
             except urllib.error.HTTPError as e:
                 print(e, file=sys.stderr)
                 time.sleep(self.sleep_time)
