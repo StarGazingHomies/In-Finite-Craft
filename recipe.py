@@ -77,18 +77,22 @@ class RecipeHandler:
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
     local_only: bool = False
-    trust_cache_nothing: bool = True  # Trust the local cache for "Nothing" results
-    nothing_verification: int = 3  # Verify "Nothing" n times with the API
-    nothing_cooldown: float = 5.0  # Cooldown between "Nothing" verifications
+    trust_cache_nothing: bool = False            # Trust the local cache for "Nothing" results
+    trust_first_run_nothing: bool = False        # Save as "Nothing" in the first run
+    local_nothing_indication: str = "Nothing\t"  # Indication of untrusted "Nothing" in the local cache
+    nothing_verification: int = 3                # Verify "Nothing" n times with the API
+    nothing_cooldown: float = 5.0                # Cooldown between "Nothing" verifications
 
     def __init__(self):
         self.recipes_cache = load_json(self.recipes_file)
         self.items_cache = load_json(self.items_file)
+
         if not self.trust_cache_nothing:
-            l = frozenset(self.recipes_cache.items())
-            for ingredients, result in l:
+            temp_set = frozenset(self.recipes_cache.items())
+            for ingredients, result in temp_set:
                 if result == "Nothing":
-                    self.recipes_cache.pop(ingredients)
+                    self.recipes_cache[ingredients] = self.local_nothing_indication
+            save_json(self.recipes_cache, self.recipes_file)
 
         atexit.register(lambda: save_json(self.recipes_cache, self.recipes_file))
         atexit.register(lambda: save_json(self.items_cache, self.items_file))
@@ -113,6 +117,10 @@ class RecipeHandler:
                 print("Autosaving items file...")
                 save_json(self.items_cache, self.items_file)
 
+        # Save as the fake nothing if it's the first run
+        if result == "Nothing" and not self.trust_first_run_nothing:
+            result = self.local_nothing_indication
+
         # Recipe: A + B --> C
         self.recipes_cache[result_key(a, b)] = result
         self.recipes_changes += 1
@@ -135,9 +143,10 @@ class RecipeHandler:
     def combine(self, a: str, b: str) -> str:
         # Query local cache
         local_result = self.get_local(a, b)
-        if local_result:
+        if local_result and local_result != self.local_nothing_indication:
             return local_result
-        elif self.local_only:
+
+        if self.local_only:
             return "Nothing"
 
         # print(f"Requesting {a} + {b}", flush=True)
@@ -148,7 +157,9 @@ class RecipeHandler:
             # last_r = r
 
         nothing_count = 1
-        while r['result'] == "Nothing" and nothing_count < self.nothing_verification:
+        while (local_result != self.local_nothing_indication and  # "Nothing" in local cache is long, long ago
+               ['result'] == "Nothing" and                        # Still getting "Nothing" from the API
+               nothing_count < self.nothing_verification):        # We haven't verified "Nothing" enough times
             # Request again to verify, just in case...
             # Increases time taken on requests but should be worth it.
             # Also note that this can't be asynchronous due to all the optimizations I made assuming a search order

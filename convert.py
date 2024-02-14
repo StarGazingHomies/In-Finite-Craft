@@ -234,10 +234,15 @@ def check_recipes(file: str, db: dict[str, str]):
 
 
 if __name__ == '__main__':
-    new_recipes = convert_to_result_first("cache/recipes.json")
-    for recipe in new_recipes["Sisyphus"]:
-        u, v = recipe.split('\t')
-        print(f"{u} + {v}, ", end = "")
+    new_recipes = convert_to_result_first("cache/v9.4/recipes_v9.4 nothing pruning.json")
+    save(new_recipes, "cache/v9.4/recipes_v9.4 nothing pruning result first.json")
+    # for recipe in new_recipes["Sisyphus"]:
+    #     u, v = recipe.split('\t')
+    #     print(f"{u} + {v}, ", end = "")
+
+    # with open("cache/v9.4/recipes_v9.4 nothing pruning.json") as file:
+    #     txt = file.read()
+    #     print(txt.count("Nothing"))
     # count_recipes("../cache/recipes.json")
     # print(load_analog_hors_json("../cache/db.json"))
     # check_recipes("../cache/recipes.json", load_analog_hors_json("../cache/db.json"))
