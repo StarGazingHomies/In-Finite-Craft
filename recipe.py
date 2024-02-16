@@ -77,11 +77,12 @@ class RecipeHandler:
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
     local_only: bool = False
-    trust_cache_nothing: bool = False            # Trust the local cache for "Nothing" results
+    trust_cache_nothing: bool = True             # Trust the local cache for "Nothing" results
     trust_first_run_nothing: bool = False        # Save as "Nothing" in the first run
     local_nothing_indication: str = "Nothing\t"  # Indication of untrusted "Nothing" in the local cache
     nothing_verification: int = 3                # Verify "Nothing" n times with the API
     nothing_cooldown: float = 5.0                # Cooldown between "Nothing" verifications
+    connection_timeout: float = 5.0                    # Connection timeout
 
     def __init__(self):
         self.recipes_cache = load_json(self.recipes_file)
@@ -132,7 +133,7 @@ class RecipeHandler:
         if result_key(a, b) not in self.recipes_cache:
             return None
         result = self.recipes_cache[result_key(a, b)]
-        if result not in self.items_cache:
+        if result != self.local_nothing_indication and result not in self.items_cache:
             # print(f"Missing {result} in cache!")
             # print(f"{result}!!")
             # Didn't get the emoji. Useful for upgrading from a previous version.
@@ -158,7 +159,7 @@ class RecipeHandler:
 
         nothing_count = 1
         while (local_result != self.local_nothing_indication and  # "Nothing" in local cache is long, long ago
-               ['result'] == "Nothing" and                        # Still getting "Nothing" from the API
+               r['result'] == "Nothing" and                        # Still getting "Nothing" from the API
                nothing_count < self.nothing_verification):        # We haven't verified "Nothing" enough times
             # Request again to verify, just in case...
             # Increases time taken on requests but should be worth it.
@@ -201,7 +202,7 @@ class RecipeHandler:
         )
         while True:
             try:
-                response = urlopen(request)
+                response = urlopen(request, timeout = self.connection_timeout)
                 # raise Exception(f"HTTP {response.getcode()}: {response.reason}")
                 # Reset exponential retrying
                 self.sleep_time = self.sleep_default

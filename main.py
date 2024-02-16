@@ -7,12 +7,41 @@ import recipe
 # import tracemalloc
 
 recipe_handler = recipe.RecipeHandler()
+# init_state: tuple[str, ...] = ("Fire", )
 init_state: tuple[str, ...] = ("Water", "Fire", "Wind", "Earth")
                                # "Lake", "Lava", "Stone", "Rock", "Lighthouse", "Hermit", "Sphinx", "Oedpius",
                                # "Oedipus Rex", "Sophocles")
-# init_state: tuple[str, ...] = ('Dandelion', 'Wine')
-                               # "Steam", "Smoke", "Engine", "Fog", "Tractor", "Tractor Beam", "Laser", "Ghost",  "Hologram", "Hologhost")
+# init_state: tuple[str, ...] = ('Earth', 'Fire', 'Water', 'Wind', 'Plant', 'Dust', 'Swamp', 'Ash', 'Dragon', 'Phoenix', 'Yin Yang', 'Feng Shui', 'Dust Bunny', 'Opposite')
+# init_state: tuple[str, ...] = ('Earth', 'Fire', 'Water', 'Wind', 'Smoke', 'Plant', 'Incense', 'Prayer', 'Candle',
+#                                'Oxygen', 'Hydrogen', 'Dandelion', 'Helium', 'Lava', 'Stone', 'Obsidian', 'Diamond',
+#                                'Carbon', 'Wave', 'Fossil', 'Ammonite', 'Ammonia', 'Ammonium', 'Nitrogen', 'Ocean',
+#                                'Dust', 'Ash', 'Salt', 'Sodium', 'Sandstorm', 'Oasis', 'Planet', 'Sun', 'Solar',
+#                                'System', 'Computer', 'Silicon', 'Perfume', 'Smell', 'Sulfur', 'Emerald', 'Green',
+#                                'Chlorine', 'Weed', 'Pot', 'Potash', 'Potassium', 'Swamp', 'Dragon', 'Sea Serpent',
+#                                'Leviathan', 'Titan', 'Dragon Egg', 'Titanium', 'Steam', 'Engine', 'Rocket',
+#                                'Satellite', 'Lake', 'Google', 'FireFox', 'Chrome', 'Chromium', 'Vacuum', 'Clean',
+#                                'Iron', 'Wine', 'Poison', 'Murder', 'Arsenic', 'Fish', 'Starfish', 'Flying Starfish',
+#                                'Superman', 'Krypton', 'Metal', 'Silver', 'Steel', 'Tin', 'Mountain', 'Dragonfly',
+#                                'Ant', 'Antfly', 'Antimony', 'Gold', 'Mars', 'Venus', 'Mercury', 'Saturn', 'Lead',
+#                                'Tobacco', 'Uranus', 'Urine', 'Uranium', 'Pluto', 'Plutonium', 'Platinum', 'Argentum',
+#                                'Pewter', 'Periodic Table')
 
+
+
+elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Nitrogen", "Oxygen", "Fluorine", "Neon",
+            "Sodium", "Magnesium", "Aluminium", "Silicon", "Phosphorus", "Sulfur", "Chlorine", "Argon", "Potassium",
+            "Calcium", "Scandium", "Titanium", "Vanadium", "Chromium", "Manganese", "Iron", "Cobalt", "Nickel",
+            "Copper", "Zinc", "Gallium", "Germanium", "Arsenic", "Selenium", "Bromine", "Krypton", "Rubidium",
+            "Strontium", "Yttrium", "Zirconium", "Niobium", "Molybdenum", "Technetium", "Ruthenium", "Rhodium",
+            "Palladium", "Silver", "Cadmium", "Indium", "Tin", "Antimony", "Tellurium", "Iodine", "Xenon", "Cesium",
+            "Barium", "Lanthanum", "Cerium", "Praseodymium", "Neodymium", "Promethium", "Samarium", "Europium",
+            "Gadolinium", "Terbium", "Dysprosium", "Holmium", "Erbium", "Thulium", "Ytterbium", "Lutetium",
+            "Hafnium", "Tantalum", "Tungsten", "Rhenium", "Osmium", "Iridium", "Platinum", "Gold", "Mercury",
+            "Thallium", "Lead", "Bismuth", "Polonium", "Astatine", "Radon", "Francium", "Radium", "Actinium",
+            "Thorium", "Protactinium", "Uranium", "Neptunium", "Plutonium", "Americium", "Curium", "Berkelium",
+            "Californium", "Einsteinium", "Fermium", "Mendelevium", "Nobelium", "Lawrencium", "Rutherfordium",
+            "Dubnium", "Seaborgium", "Bohrium", "Hassium", "Meitnerium", "Darmstadtium", "Roentgenium", "Copernicium",
+            "Nihonium", "Flerovium", "Moscovium", "Livermorium", "Tennessine", "Oganesson"]
 
 # Math, Number, Reality or Vacuum
 
@@ -117,13 +146,15 @@ best_recipes: dict[str, list[GameState]] = dict()
 visited = set()
 best_depths: dict[str, int] = dict()
 best_recipes_file: str = "best_recipes.txt"
-all_best_recipes_file: str = "all_best_recipes_depth_9.txt"
+all_best_recipes_file: str = "expanded_recipes_depth_9.txt"
+extra_depth = 0
 
 
 def process_node(state: GameState):
     if state.tail_item() not in visited:
         visited.add(state.tail_item())
         #  Dumb writing to file
+        # if state.tail_item() in elements:
         with open(best_recipes_file, "a", encoding="utf-8") as file:
             file.write(str(len(visited)) + ": " + str(state) + "\n\n")
     # Multiple recipes for the same item at same depth
@@ -131,7 +162,7 @@ def process_node(state: GameState):
     # if state.tail_item() not in best_depths:
     #     best_depths[state.tail_item()] = depth
     #     best_recipes[state.tail_item()] = [state,]
-    # elif depth == best_depths[state.tail_item()]:
+    # elif depth <= best_depths[state.tail_item()] + extra_depth:
     #     best_recipes[state.tail_item()].append(state)
 
 
@@ -240,11 +271,13 @@ def iterative_deepening_dfs():
     # with open(all_best_recipes_file, "w", encoding="utf-8") as file:
     #     for key, value in best_recipes.items():
     #         # print(f"{key} has {len(value)} distinct minimal recipes")
-    #         file.write(f"{key} has {len(value)} distinct minimal recipes:\n")
-    #         for r in value:
-    #             items = list(r.items_set())
-    #             items.sort()
-    #             file.write("\n{" + ", ".join(items) + "} -> " + str(r) + "\n")
+    #         # file.write(f"{key} has {len(value)} distinct recipes that's 1 off from minimal:\n")
+    #         file.write(f"{key}\n")
+    #         # for r in value:
+    #         #     items = list(r.items_set())
+    #         #     items.sort()
+    #         #     file.write("\n{" + ", ".join(items) + "} -> " + str(r) + "\n")
+    #         file.write("\n--\n".join([str(r) for r in value]))
     #
     #         file.write("\n-----------------------------------------------\n")
 
@@ -256,3 +289,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # print("\", \"".join(elements.split('\n')))

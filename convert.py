@@ -32,8 +32,9 @@ def merge_recipe_files(file1: str, file2: str, output: str):
             recipes1[key] = recipes2[key]
         if key in recipes1 and recipes2[key] != recipes1[key]:
             print(f"Conflict: {key} -> {recipes1[key]} vs {recipes2[key]}")
-            if recipes1[key] == "Nothing":
+            if recipes1[key] == "Nothing\t" or (recipes1[key] == "Nothing" and recipes2[key] != "Nothing\t"):
                 recipes1[key] = recipes2[key]
+            print(f"Resolved: {key} -> {recipes1[key]}")
 
     save(recipes1, output)
 
@@ -272,11 +273,11 @@ if __name__ == '__main__':
     # count_recipes("../cache/recipes.json")
     # print(load_analog_hors_json("../cache/db.json"))
     # check_crafts("../cache/recipes.json", load_analog_hors_json("../cache/db.json"))
-    check_recipes("best_recipes_depth_9_v1.txt", "best_recipes_depth_9_v2.txt")
+    # check_recipes("best_recipes_depth_9_v1.txt", "best_recipes_depth_9_v2.txt")
     # best_recipes_to_json("../best_recipes.txt", "../relevant_recipes.json")
     # remove_new("../cache/items.json", "../cache/emojis.json")
-    # merge_recipe_files("../cache/recipes.json", "../cache/recipes_search.json", "../cache/recipes_merged.json")
-    # merge_items_files("../cache/items.json", "../cache/items_search.json", "../cache/items_merged.json")
+    merge_recipe_files("cache/recipes.json", "cache/recipes_.json", "cache/recipes_merged.json")
+    merge_items_files("cache/items.json", "cache/items_.json", "cache/items_merged.json")
     # remove_plus_duplicates("../cache/recipes_merged.json", "../cache/recipes_trim.json")
     # change_delimiter("../cache/recipes_trim.json", "../cache/recipes_tab.json")
     # modify_save_file("../infinitecraft.json", "../cache/items.json", "../infinitecraft_modified.json")
