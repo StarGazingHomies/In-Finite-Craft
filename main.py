@@ -8,10 +8,10 @@ import recipe
 
 recipe_handler = recipe.RecipeHandler()
 # init_state: tuple[str, ...] = ("Fire", )
-init_state: tuple[str, ...] = ("Water", "Fire", "Wind", "Earth")
+# init_state: tuple[str, ...] = ("Water", "Fire", "Wind", "Earth")
                                # "Lake", "Lava", "Stone", "Rock", "Lighthouse", "Hermit", "Sphinx", "Oedpius",
                                # "Oedipus Rex", "Sophocles")
-# init_state: tuple[str, ...] = ('Earth', 'Fire', 'Water', 'Wind', 'Plant', 'Dust', 'Swamp', 'Ash', 'Dragon', 'Phoenix', 'Yin Yang', 'Feng Shui', 'Dust Bunny', 'Opposite')
+init_state: tuple[str, ...] = ('Earth', 'Fire', 'Water', 'Wind', 'Dust', 'Ash', 'Phoenix', 'Rebirth', 'Fish', 'Dragon', 'Yin Yang', 'Feng Shui', 'Dust Bunny', 'Opposite')
 # init_state: tuple[str, ...] = ('Earth', 'Fire', 'Water', 'Wind', 'Smoke', 'Plant', 'Incense', 'Prayer', 'Candle',
 #                                'Oxygen', 'Hydrogen', 'Dandelion', 'Helium', 'Lava', 'Stone', 'Obsidian', 'Diamond',
 #                                'Carbon', 'Wave', 'Fossil', 'Ammonite', 'Ammonia', 'Ammonium', 'Nitrogen', 'Ocean',
