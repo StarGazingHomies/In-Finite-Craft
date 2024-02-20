@@ -11,11 +11,13 @@ Every time a new depth is completed, I will publish the recipes as a release.
 Since people are discussing the methodology behind the iddfs algorithm 
 used in my code for finding minimal # of crafts, I will explain it here.
 
-The algorithm very close to optimal, but experimentally, the time and requests 
+The algorithm is very close to optimal, but experimentally, the time and requests 
 are still worse than exponential time. Therefore, it is not appropriate
-for use in things like the @Infinite Helper Bot (by Mikarific), or for finding
+for use in things like the @Infinite Helper Bot (by Mikarific), which requires
+the alrogithm to continuously update as new data gets uploaded, or for finding
 a lineage to very deep elements. For that purpose, look towards something
-like A* (with a good heuristic, such as precomputing depth, suggested by @BRH0208).
+like A* (with a good heuristic, such as starting from the leaf node and using
+min(depth(A), depth(B)), suggested by @BRH0208).
 
 ### Definitions
 
@@ -116,7 +118,8 @@ grows further if we include the next optimization as well.
 Why would you ever craft something if it isn't used? Maybe it will be used
 later down the line, but we would never do such a thing in an optimal recipe.
 If `g` is the optimal route for `B`, but element `A` is unused, 
-then removing `A` would result in a lower depth and valid route for `B`.
+then removing `A` would result in a lower depth and valid route for `B`,
+which contradicts the optimality of `g`.
 
 This means that we can keep track of which elements are unused during the
 crafting process, and once there are simply too many to use within the
@@ -158,6 +161,11 @@ have an existing recipe, and `recipe.py` for how recipes are handled.
 
 If you want to make sure your speedrun route has missing elements, 
 repeats, or unused elements, run `speedrun.txt`. It must be in the format
-of `x + y -> z`.
+of `x + y -> z`. Comment lines start with `#`.
+
+There are two types of checks in `speedrun.txt`: static check makes sure
+that your speedrun route makes sense (no duplicates, no missing elements, no
+unused elements) while dynamic check makes requests to Neal's API to make sure
+that your speedrun route has correct crafts.
 
 Currently, the script does not accept CLI arguments.

@@ -1,9 +1,11 @@
+import recipe
+
 elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Nitrogen", "Oxygen", "Fluorine", "Neon",
             "Sodium", "Magnesium", "Aluminium", "Silicon", "Phosphorus", "Sulfur", "Chlorine", "Argon", "Potassium",
             "Calcium", "Scandium", "Titanium", "Vanadium", "Chromium", "Manganese", "Iron", "Cobalt", "Nickel",
             "Copper", "Zinc", "Gallium", "Germanium", "Arsenic", "Selenium", "Bromine", "Krypton", "Rubidium",
             "Strontium", "Yttrium", "Zirconium", "Niobium", "Molybdenum", "Technetium", "Ruthenium", "Rhodium",
-            "Palladium", "Silver", "Cadmium", "Indium", "Tin", "Antimony", "Tellurium", "Iodine", "Xenon", "Cesium",
+            "Palladium", "Silver", "Cadmium", "Indium", "Tin", "Antimony", "Tellurium", "Iodine", "Xenon", "Caesium",
             "Barium", "Lanthanum", "Cerium", "Praseodymium", "Neodymium", "Promethium", "Samarium", "Europium",
             "Gadolinium", "Terbium", "Dysprosium", "Holmium", "Erbium", "Thulium", "Ytterbium", "Lutetium",
             "Hafnium", "Tantalum", "Tungsten", "Rhenium", "Osmium", "Iridium", "Platinum", "Gold", "Mercury",
@@ -12,9 +14,10 @@ elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Ni
             "Californium", "Einsteinium", "Fermium", "Mendelevium", "Nobelium", "Lawrencium", "Rutherfordium",
             "Dubnium", "Seaborgium", "Bohrium", "Hassium", "Meitnerium", "Darmstadtium", "Roentgenium", "Copernicium",
             "Nihonium", "Flerovium", "Moscovium", "Livermorium", "Tennessine", "Oganesson"]
+recipe_handler = None
 
 
-def check_script(filename: str):
+def static_check_script(filename: str):
     with open(filename, 'r') as file:
         crafts = file.readlines()
 
@@ -32,31 +35,70 @@ def check_script(filename: str):
         ing1, ing2 = ingredients.split(' + ')
         craft_count += 1
         if ing1.strip() not in current:
-            print(f"Ingredient {ing1.strip()} not found in line {i+1}")
+            print(f"Ingredient {ing1.strip()} not found in line {i + 1}")
         else:
             current[ing1.strip()] += 1
         if ing2.strip() not in current:
-            print(f"Ingredient {ing2.strip()} not found in line {i+1}")
+            print(f"Ingredient {ing2.strip()} not found in line {i + 1}")
         else:
             current[ing2.strip()] += 1
         if results.strip() in current:
-            print(f"Result {results.strip()} already exists in line {i+1}")
+            print(f"Result {results.strip()} already exists in line {i + 1}")
 
         current[results.strip()] = 0
         # print(f'{ing1} + {ing2} -> {results}')
     element_count = 0
+    elements_copy = elements.copy()
     for ingredient, value in current.items():
-        if value == 0 and ingredient not in elements:
+        if value == 0 and ingredient not in elements_copy:
             print(f"Ingredient {ingredient} is not used in any recipe")
-        if ingredient in elements:
+        if ingredient in elements_copy:
             element_count += 1
-            elements.remove(ingredient)
-    print("\n".join([str(elements[i*10:i*10+10]) for i in range(11)]))
+            elements_copy.remove(ingredient)
+    print("\n".join([str(elements_copy[i * 10:i * 10 + 10]) for i in range(11)]))
     print(craft_count)
-    print(current)
-    print(tuple(current.keys()))
+    # print(current)
+    current_list = list(current.items())
+    current_list.sort(key=lambda x: x[1], reverse=True)
+    # for k, v in current_list:
+    #     if k in elements:
+    #         continue
+    #     print(f"{k}: {v}")
+    # print(tuple(current.keys()))
     print(element_count)
     return current
+
+
+def dynamic_check_script(filename: str):
+    global recipe_handler
+    if recipe_handler is None:
+        recipe_handler = recipe.RecipeHandler()
+
+    with open(filename, 'r', encoding='utf-8') as file:
+        crafts = file.readlines()
+
+    # Format: ... + ... -> ...
+    current = {"Earth": 0,
+               "Fire": 0,
+               "Water": 0,
+               "Wind": 0}
+    craft_count = 0
+    has_issues = False
+    for i, craft in enumerate(crafts):
+        # print(craft)
+        if craft == '\n' or craft[0] == "#":
+            continue
+        craft = craft.replace("'", '’')
+        ingredients, results = craft.split(' -> ')
+        ing1, ing2 = ingredients.split(' + ')
+        craft_count += 1
+        true_result = recipe_handler.combine(ing1.strip(), ing2.strip())
+        if true_result != results.strip():
+            has_issues = True
+            print(f"Craft {ing1} + {ing2} -> {results} is not correct. The correct response is {true_result}")
+
+    if not has_issues:
+        print("All recipes are correct!")
 
 
 def count_uses(filename: str):
@@ -81,7 +123,7 @@ def count_uses(filename: str):
     print(current)
 
 
-def load_best_recipes(filename: str) ->  dict[str, list[list[tuple[str, str, str]]]]:
+def load_best_recipes(filename: str) -> dict[str, list[list[tuple[str, str, str]]]]:
     # Loading the all best recipes file for easy element adding
     with open(filename, 'r') as file:
         lines = file.readlines()
@@ -130,12 +172,12 @@ def load_best_recipes(filename: str) ->  dict[str, list[list[tuple[str, str, str
     return recipes
 
 
-def find_best_element_recipe(filename: str, element: str, recipes: dict[str, list[list[tuple[str, str, str]]]]):
+def add_element(filename: str, element: str, recipes: dict[str, list[list[tuple[str, str, str]]]]):
     if element not in recipes:
         print(f"Element {element} not found in recipes")
         return
 
-    cur_elements = check_script(filename)
+    cur_elements = static_check_script(filename)
 
     best_recipe = []
     best_cost = 1e9
@@ -157,8 +199,44 @@ def find_best_element_recipe(filename: str, element: str, recipes: dict[str, lis
         print(f"{u} + {v} -> {w}")
 
 
+def combine_element_pairs():
+    global recipe_handler
+    if recipe_handler is None:
+        recipe_handler = recipe.RecipeHandler()
+
+    results = {}
+    for i in range(len(elements)):
+        for j in range(i, len(elements)):
+            result = recipe_handler.combine(elements[i], elements[j])
+            if result != elements[i] and result != elements[j]:
+                if result in results:
+                    results[result].append((elements[i], elements[j]))
+                else:
+                    results[result] = [(elements[i], elements[j])]
+
+    # intermediates = list(results.items())
+    # print(intermediates)
+
+    unused_elements = elements.copy()
+
+    for k, v in results.items():
+        if k in unused_elements:
+            unused_elements.remove(k)
+        if k not in elements:
+            continue
+        print(f"{k} can be obtained from {len(v)} methods")
+        for u, w in v:
+            print(f"{u} + {w} -> {k}")
+        print()
+
+    for e in unused_elements:
+        print(f"{e} can't be made in 1 step")
+
+
 if __name__ == '__main__':
-    # check_script('NewPeriodicTable.txt')
-    find_best_element_recipe('-1.txt',
-                             "Camera",
-                             load_best_recipes('expanded_recipes_depth_9.txt'))
+    # combine_element_pairs()
+    # static_check_script('periodic_table_speedrun_v1.4.txt')
+    dynamic_check_script('periodic_table_speedrun_v1.4.txt')
+    add_element('periodic_table_speedrun_v1.4.txt',
+                             "Blue",
+                load_best_recipes('expanded_recipes_depth_9.txt'))

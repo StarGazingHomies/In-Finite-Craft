@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 
 DELIMITER = "\t"
 WORD_TOKEN_LIMIT = 20
+WORD_COMBINE_CHAR_LIMIT = 30
 
 
 def result_key(param1, param2):
@@ -88,15 +89,18 @@ class RecipeHandler:
         self.recipes_cache = load_json(self.recipes_file)
         self.items_cache = load_json(self.items_file)
 
+        # Get rid of "nothing"s, if we don't trust "nothing"s.
         if not self.trust_cache_nothing:
             temp_set = frozenset(self.recipes_cache.items())
             for ingredients, result in temp_set:
-                if result == "Nothing":
+                if result == "Nothing" or result == self.local_nothing_indication:
                     self.recipes_cache[ingredients] = self.local_nothing_indication
             save_json(self.recipes_cache, self.recipes_file)
 
-        atexit.register(lambda: save_json(self.recipes_cache, self.recipes_file))
-        atexit.register(lambda: save_json(self.items_cache, self.items_file))
+        # If we're not adding anything, we don't need to save
+        if not self.local_only:
+            atexit.register(lambda: save_json(self.recipes_cache, self.recipes_file))
+            atexit.register(lambda: save_json(self.items_cache, self.items_file))
 
     def save_response(self, a: str, b: str, response: dict):
         # print(a, b, result_key(a, b), response)
@@ -197,7 +201,7 @@ class RecipeHandler:
             f"https://neal.fun/api/infinite-craft/pair?first={a_req}&second={b_req}",
             headers={
                 "Referer": "https://neal.fun/infinite-craft/",
-                "User-Agent": "curl/7.54.1",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
             },
         )
         while True:
