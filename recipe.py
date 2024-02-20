@@ -201,7 +201,7 @@ class RecipeHandler:
             f"https://neal.fun/api/infinite-craft/pair?first={a_req}&second={b_req}",
             headers={
                 "Referer": "https://neal.fun/infinite-craft/",
-                "User-Agent": "curl/7.68.0",
+                "User-Agent": "curl/7.54.1",
             },
         )
         while True:
