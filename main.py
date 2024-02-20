@@ -7,11 +7,11 @@ import recipe
 # import tracemalloc
 
 recipe_handler = recipe.RecipeHandler()
-# init_state: tuple[str, ...] = ("Fire", )
-# init_state: tuple[str, ...] = ("Water", "Fire", "Wind", "Earth")
-                               # "Lake", "Lava", "Stone", "Rock", "Lighthouse", "Hermit", "Sphinx", "Oedpius",
-                               # "Oedipus Rex", "Sophocles")
-init_state: tuple[str, ...] = ('Earth', 'Fire', 'Water', 'Wind', 'Dust', 'Ash', 'Phoenix', 'Rebirth', 'Fish', 'Dragon', 'Yin Yang', 'Feng Shui', 'Dust Bunny', 'Opposite')
+# init_state: tuple[str, ...] = ("1", )
+init_state: tuple[str, ...] = ("Water", "Fire", "Wind", "Earth")
+# "Lake", "Lava", "Stone", "Rock", "Lighthouse", "Hermit", "Sphinx", "Oedpius",
+# "Oedipus Rex", "Sophocles")
+# init_state: tuple[str, ...] = ('Earth', 'Fire', 'Water', 'Wind', 'Dust', 'Ash', 'Phoenix', 'Rebirth', 'Fish', 'Dragon', 'Yin Yang', 'Feng Shui', 'Dust Bunny', 'Opposite')
 # init_state: tuple[str, ...] = ('Earth', 'Fire', 'Water', 'Wind', 'Smoke', 'Plant', 'Incense', 'Prayer', 'Candle',
 #                                'Oxygen', 'Hydrogen', 'Dandelion', 'Helium', 'Lava', 'Stone', 'Obsidian', 'Diamond',
 #                                'Carbon', 'Wave', 'Fossil', 'Ammonite', 'Ammonia', 'Ammonium', 'Nitrogen', 'Ocean',
@@ -25,7 +25,6 @@ init_state: tuple[str, ...] = ('Earth', 'Fire', 'Water', 'Wind', 'Dust', 'Ash', 
 #                                'Ant', 'Antfly', 'Antimony', 'Gold', 'Mars', 'Venus', 'Mercury', 'Saturn', 'Lead',
 #                                'Tobacco', 'Uranus', 'Urine', 'Uranium', 'Pluto', 'Plutonium', 'Platinum', 'Argentum',
 #                                'Pewter', 'Periodic Table')
-
 
 
 elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Nitrogen", "Oxygen", "Fluorine", "Neon",
@@ -43,7 +42,7 @@ elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Ni
             "Dubnium", "Seaborgium", "Bohrium", "Hassium", "Meitnerium", "Darmstadtium", "Roentgenium", "Copernicium",
             "Nihonium", "Flerovium", "Moscovium", "Livermorium", "Tennessine", "Oganesson"]
 
-# Math, Number, Reality or Vacuum
+# init_state = tuple(list(init_state) + elements + ["Periodic Table",])
 
 
 @cache
@@ -113,7 +112,11 @@ class GameState:
         # Invalid crafts, items we already have, or items that can be crafted earlier are ignored.
         if (craft_result is None or
                 craft_result == "Nothing" or
-                craft_result in self.items or
+                craft_result in self.items or # TODO: Temporary ignore for elements search
+                # craft_result == self.items[u] or craft_result == self.items[v] or
+                # (craft_result in self.items and self.used[self.items.index(craft_result)] != 0) or
+                # Even though we are looking for results in the original list, we still
+                # Don't want to use the result itself in any craft
                 craft_result in self.children):
             return None
 
@@ -121,8 +124,8 @@ class GameState:
         self.children.add(craft_result)
 
         # Construct the new state
-        new_state = self.state + [i,]
-        new_items = self.items + [craft_result,]
+        new_state = self.state + [i, ]
+        new_items = self.items + [craft_result, ]
         new_used = self.used.copy()
         new_used.append(0)
         new_used[u] += 1
@@ -146,7 +149,8 @@ best_recipes: dict[str, list[GameState]] = dict()
 visited = set()
 best_depths: dict[str, int] = dict()
 best_recipes_file: str = "best_recipes.txt"
-all_best_recipes_file: str = "expanded_recipes_depth_9.txt"
+# all_best_recipes_file: str = "expanded_elements_recipes.txt"
+all_best_recipes_file: str = "expanded_recipes_depth_10.txt"
 extra_depth = 0
 
 
@@ -174,20 +178,25 @@ def dls(state: GameState, depth: int) -> int:
     :param depth: The depth remaining
     :return: The number of states processed
     """
-    if depth == 0:                          # We've reached the end of the crafts, process the node
+    if depth == 0:  # We've reached the end of the crafts, process the node
         process_node(state)
         return 1
 
-    # In the future, remove states with overly long words w/ lots of tokens
-    # I'm nowhere near that token limit though
+    # 30 token limit, according to PB and laurasia
+    if len(state.tail_item()) > recipe.WORD_COMBINE_CHAR_LIMIT:
+        return 0
+
+    # TODO: Extra step until filtering, for elements search
+    # if state.tail_item() in state.items[:-1]:
+    #     return 0
 
     count = 0  # States counter
-    unused_items = state.unused_items()     # Unused items
-    if len(unused_items) > depth + 1:       # Impossible to use all elements, since we have too few crafts left
+    unused_items = state.unused_items()  # Unused items
+    if len(unused_items) > depth + 1:  # Impossible to use all elements, since we have too few crafts left
         return 0
-    elif len(unused_items) > depth:         # We must start using unused elements NOW.
+    elif len(unused_items) > depth:  # We must start using unused elements NOW.
         for j in range(len(unused_items)):  # For loop ordering is important. We want increasing pair_to_int order.
-            for i in range(j):              # i != j. We have to use two for unused_items to decrease.
+            for i in range(j):  # i != j. We have to use two for unused_items to decrease.
                 child = state.child(pair_to_int(unused_items[i], unused_items[j]))
                 if child is not None:
                     count += dls(child, depth - 1)
@@ -195,7 +204,7 @@ def dls(state: GameState, depth: int) -> int:
     # TODO: elif len(unused_items) == depth might be a useful pruning case. Not gonna bother right now.
     else:
         lower_limit = 0
-        if depth == 1 and state.tail_index() != -1:      # Must use the 2nd last element, if it's not a default item.
+        if depth == 1 and state.tail_index() != -1:  # Must use the 2nd last element, if it's not a default item.
             lower_limit = limit(len(state) - 1)
 
         for i in range(lower_limit, limit(len(state))):  # Regular ol' searching
@@ -261,8 +270,8 @@ def iterative_deepening_dfs():
         print(f"{curDepth}   {len(visited)}     {time.perf_counter() - start_time:.4f}")
         # print(best_recipes)
         # print(flush=True)
-        # if curDepth == 10:
-        #     break
+        if curDepth == 10:
+            break
         # Only relevant for local files - if exhausted the outputs, stop
         if len(visited) == prev_visited:
             break
@@ -270,6 +279,8 @@ def iterative_deepening_dfs():
 
     # with open(all_best_recipes_file, "w", encoding="utf-8") as file:
     #     for key, value in best_recipes.items():
+    #         # if key not in elements:
+    #         #     continue
     #         # print(f"{key} has {len(value)} distinct minimal recipes")
     #         # file.write(f"{key} has {len(value)} distinct recipes that's 1 off from minimal:\n")
     #         file.write(f"{key}\n")

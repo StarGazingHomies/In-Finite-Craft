@@ -1,6 +1,7 @@
 import json
 import os
 from recipe import result_key
+from functools import cache
 
 
 def save(dictionary, file_name):
@@ -173,10 +174,17 @@ def modify_save_file(file: str, items_file: str, new_file: str):
                 "discovered": val[1]
             }
 
-    new_data_2 = {'elements': []}
+    new_data_2 = data.copy()
+    new_data_2['elements'] = []
+    new_cnt = 0
     for val in new_data.values():
         new_data_2['elements'].append(val)
-    print(new_data_2)
+        if val['discovered']:
+            new_cnt += 1
+    print(new_cnt)
+    # print(new_data_2)
+
+    print(len(new_data_2['elements']))
 
     with open(new_file, "w", encoding='utf-8') as f:
         json.dump(new_data_2, f)
@@ -260,12 +268,41 @@ def check_recipes(file1, file2):
                 print(f"Missing {v} at depth {i} in 1st book")
 
 
+@cache
+def limit(n: int) -> int:
+    return n * (n + 1) // 2
+
+
+init_list_size = 4
+
+
+@cache
+def ordered_total(cur_limit, cur_step, max_steps):
+    if cur_step == max_steps:
+        return 1
+    if cur_limit >= limit(cur_step + init_list_size):
+        return 0
+
+    # print(f"Step {cur_step} with limit {cur_limit} has {s} recipes")
+    return \
+        ordered_total(cur_limit + 1, cur_step + 1, max_steps) + \
+        ordered_total(cur_limit + 1, cur_step, max_steps)
+
+
 if __name__ == '__main__':
-    # new_recipes = convert_to_result_first("cache/v9.4/recipes_v9.4 nothing pruning.json")
+    # print(ordered_total(0, 0, 9))  # 26248400230
+    # print(ordered_total(4, 0, 9))
+    new_recipes = convert_to_result_first("cache/recipes.json")
+    # new_recipes_list = list(new_recipes.items())
+    # new_recipes_list.sort(key=lambda x: len(x[1]), reverse=True)
+    # for key, value in new_recipes_list[:20]:
+    #     print(f"{key}: {len(value)}")
     # save(new_recipes, "cache/v9.4/recipes_v9.4 nothing pruning result first.json")
-    # for recipe in new_recipes["Sisyphus"]:
-    #     u, v = recipe.split('\t')
-    #     print(f"{u} + {v}, ", end = "")
+    for recipe in new_recipes["Blue"]:
+        u, v = recipe.split('\t')
+        if u in ("Blue", "Cobalt") or v in ("Blue", "Cobalt"):
+            continue
+        print(f"{u} + {v}, ")
 
     # with open("cache/v9.4/recipes_v9.4 nothing pruning.json") as file:
     #     txt = file.read()
@@ -275,9 +312,9 @@ if __name__ == '__main__':
     # check_crafts("../cache/recipes.json", load_analog_hors_json("../cache/db.json"))
     # check_recipes("best_recipes_depth_9_v1.txt", "best_recipes_depth_9_v2.txt")
     # best_recipes_to_json("../best_recipes.txt", "../relevant_recipes.json")
-    # remove_new("../cache/items.json", "../cache/emojis.json")
-    merge_recipe_files("cache/recipes.json", "cache/recipes_.json", "cache/recipes_merged.json")
-    merge_items_files("cache/items.json", "cache/items_.json", "cache/items_merged.json")
+    # remove_new("cache/backup - depth 9.8/items.json", "cache/backup - depth 9.8/emojis.json")
+    # merge_recipe_files("cache/recipes.json", "cache/recipes_periodic.json", "cache/recipes_merged.json")
+    # merge_items_files("cache/items.json", "cache/items_periodic.json", "cache/items_merged.json")
     # remove_plus_duplicates("../cache/recipes_merged.json", "../cache/recipes_trim.json")
     # change_delimiter("../cache/recipes_trim.json", "../cache/recipes_tab.json")
-    # modify_save_file("../infinitecraft.json", "../cache/items.json", "../infinitecraft_modified.json")
+    # modify_save_file("infinitecraft_save.json", "cache/items.json", "infinitecraft_modified.json")
