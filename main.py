@@ -1,3 +1,4 @@
+import json
 import time
 from functools import cache
 from typing import Optional
@@ -135,6 +136,13 @@ class GameState:
     def unused_items(self) -> list[int]:
         return [i for i in range(len(init_state), len(self.items)) if 0 == self.used[i]]
 
+    def crafts_list(self) -> list[tuple[str, str, str]]:
+        for i in range(len(self.state)):
+            left, right = int_to_pair(self.state[i])
+            if (left < 0) or (right < 0):
+                continue
+            yield self.items[left], self.items[right], self.items[i]
+
     def items_set(self) -> frozenset[str]:
         return frozenset(self.items)
 
@@ -151,6 +159,9 @@ best_depths: dict[str, int] = dict()
 best_recipes_file: str = "best_recipes.txt"
 # all_best_recipes_file: str = "expanded_elements_recipes.txt"
 all_best_recipes_file: str = "expanded_recipes_depth_10.txt"
+relevant_recipes: dict[str, set] = {}
+relevant_recipes_file: str = "relevant_recipes.txt"
+relevant_recipes_file_2: str = "relevant_recipes.json"
 extra_depth = 0
 
 
@@ -161,6 +172,13 @@ def process_node(state: GameState):
         # if state.tail_item() in elements:
         with open(best_recipes_file, "a", encoding="utf-8") as file:
             file.write(str(len(visited)) + ": " + str(state) + "\n\n")
+        # for craft in state.crafts_list():
+        #     u, v, result = craft
+        #     if result in relevant_recipes:
+        #         relevant_recipes[result].add((u, v))
+        #     else:
+        #         relevant_recipes[result] = {(u, v)}
+
     # Multiple recipes for the same item at same depth
     # depth = len(state) - len(init_state)
     # if state.tail_item() not in best_depths:
@@ -276,6 +294,20 @@ def iterative_deepening_dfs():
         if len(visited) == prev_visited:
             break
         curDepth += 1
+
+    # with open(relevant_recipes_file, "w", encoding="utf-8") as file:
+    #     relevant_recipes_list = {}
+    #     for key, value in relevant_recipes.items():
+    #         relevant_recipes_list[key] = list(value)
+    #     json.dump(relevant_recipes_list, file)
+    #     relevant_recipes_elements_first = {}
+    #
+    # with open(relevant_recipes_file_2, "w", encoding="utf-8") as file:
+    #     for key, value in relevant_recipes.items():
+    #         for u, v in value:
+    #             ingredients_str = recipe.result_key(u, v)
+    #             relevant_recipes_elements_first[ingredients_str] = key
+    #     json.dump(relevant_recipes_elements_first, file)
 
     # with open(all_best_recipes_file, "w", encoding="utf-8") as file:
     #     for key, value in best_recipes.items():

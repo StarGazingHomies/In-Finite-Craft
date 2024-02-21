@@ -1,6 +1,7 @@
 import atexit
 import json
 import os
+import sqlite3
 import sys
 import time
 import traceback
@@ -26,19 +27,19 @@ def result_key(param1, param2):
 
 def load_json(file_name):
     try:
-        return json.load(open(file_name, 'r'))
+        return json.load(open(file_name, 'r', encoding='utf-8'))
     except FileNotFoundError:
         return {}
 
 
 def save_json(dictionary, file_name):
     try:
-        json.dump(dictionary, open(file_name, 'w'))
+        json.dump(dictionary, open(file_name, 'w', encoding='utf-8'))
     except FileNotFoundError:
         print(f"Could not write to {file_name}! Trying to create cache folder...", flush=True)
         try:
             os.mkdir("cache")  # TODO: generalize
-            json.dump(dictionary, open(file_name, 'w'))
+            json.dump(dictionary, open(file_name, 'w', encoding='utf-8'))
         except Exception as e:
             print(f"Could not create folder or write to file: {e}", flush=True)
             print(dictionary)
@@ -63,14 +64,10 @@ def save_nothing(a: str, b: str, response: dict):
 
 
 class RecipeHandler:
-    recipes_cache: dict[str, str]
-    items_cache: dict[str, tuple[str, bool]]
-    recipes_changes: int = 0
-    recipe_autosave_interval: int = 200
-    items_changes: int = 0
-    items_autosave_interval: int = 50
-    recipes_file: str = "cache/recipes.json"
-    items_file: str = "cache/items.json"
+    recipes_db: sqlite3.Connection
+    recipes_file: str = "cache/recipes.db"
+    recipes_autosave_interval: int = 500
+    recipes_change_count: int = 0
 
     last_request: float = 0
     request_cooldown: float = 0.5  # 0.5s is safe for this API
@@ -81,28 +78,40 @@ class RecipeHandler:
     trust_cache_nothing: bool = True             # Trust the local cache for "Nothing" results
     trust_first_run_nothing: bool = False        # Save as "Nothing" in the first run
     local_nothing_indication: str = "Nothing\t"  # Indication of untrusted "Nothing" in the local cache
-    nothing_verification: int = 3                # Verify "Nothing" n times with the API
+    nothing_verification: int = 1                # Verify "Nothing" n times with the API
     nothing_cooldown: float = 5.0                # Cooldown between "Nothing" verifications
-    connection_timeout: float = 5.0                    # Connection timeout
+    connection_timeout: float = 5.0              # Connection timeout
 
     def __init__(self):
-        self.recipes_cache = load_json(self.recipes_file)
-        self.items_cache = load_json(self.items_file)
+        self.recipes_db = sqlite3.connect(self.recipes_file)
 
-        # Get rid of "nothing"s, if we don't trust "nothing"s.
+        self.recipes_db.execute("CREATE TABLE IF NOT EXISTS recipes ("
+                                "id INTEGER PRIMARY KEY, "
+                                "u TEXT, "
+                                "v TEXT, "
+                                "result TEXT)")
+        self.recipes_db.execute('''CREATE INDEX IF NOT EXISTS recipe_index ON recipes (u, v, result)''')
+        self.recipes_db.execute("CREATE TABLE IF NOT EXISTS items ("
+                                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                                "name TEXT, "
+                                "emoji TEXT, "
+                                "discovered BOOLEAN)")
+        self.recipes_db.execute('''CREATE INDEX IF NOT EXISTS ZZZitem_name_index ON items (name)''')
+
+        # Replace "Nothing" with local nothing indication
         if not self.trust_cache_nothing:
-            temp_set = frozenset(self.recipes_cache.items())
-            for ingredients, result in temp_set:
-                if result == "Nothing" or result == self.local_nothing_indication:
-                    self.recipes_cache[ingredients] = self.local_nothing_indication
-            save_json(self.recipes_cache, self.recipes_file)
+            self.recipes_db.execute(f"UPDATE recipes SET result = ? WHERE result = 'Nothing'",
+                                    (self.local_nothing_indication,))
 
-        # If we're not adding anything, we don't need to save
-        if not self.local_only:
-            atexit.register(lambda: save_json(self.recipes_cache, self.recipes_file))
-            atexit.register(lambda: save_json(self.items_cache, self.items_file))
+        atexit.register(self.close)
+
+    def close(self):
+        self.recipes_db.commit()
+        self.recipes_db.close()
 
     def save_response(self, a: str, b: str, response: dict):
+        if a > b:
+            a, b = b, a
         # print(a, b, result_key(a, b), response)
         result = response['result']
         emoji = response['emoji']
@@ -110,42 +119,38 @@ class RecipeHandler:
         print(f"New Recipe: {a} + {b} -> {result}")
         if new:
             print(f"FIRST DISCOVERY: {a} + {b} -> {result}")
-        # print(result)
 
+        self.recipes_change_count += 1
+        if self.recipes_change_count >= self.recipes_autosave_interval:
+            self.recipes_change_count = 0
+            self.recipes_db.commit()
         # Items - emoji, new discovery
-        if result not in self.items_cache:
-            # print(f"Adding {result} to items cache...")
-            # print(self.items_cache[result])
-            self.items_cache[result] = (emoji, new)
-            self.items_changes += 1
-            if self.items_changes % self.items_autosave_interval == 0:
-                print("Autosaving items file...")
-                save_json(self.items_cache, self.items_file)
+        self.recipes_db.execute("INSERT OR IGNORE INTO items (name, emoji, discovered) VALUES (?, ?, ?)", (result, emoji, new))
 
         # Save as the fake nothing if it's the first run
-        if result == "Nothing" and result not in self.recipes_cache and self.trust_first_run_nothing:
-            result = self.local_nothing_indication
+        if result == "Nothing" and self.trust_first_run_nothing:
+            cur_result = self.recipes_db.execute("SELECT result FROM recipes WHERE u = ? AND v = ?", (a, b)).fetchone()
+            if cur_result is None:
+                result = self.local_nothing_indication
 
-        # Recipe: A + B --> C
-        self.recipes_cache[result_key(a, b)] = result
-        self.recipes_changes += 1
-        if self.recipes_changes % self.recipe_autosave_interval == 0:
-            print("Autosaving recipes file...")
-            save_json(self.recipes_cache, self.recipes_file)
+        # Recipes
+        self.recipes_db.execute("INSERT OR REPLACE INTO recipes (u, v, result) VALUES (?, ?, ?)", (a, b, result))
 
     def get_local(self, a: str, b: str) -> Optional[str]:
-        if result_key(a, b) not in self.recipes_cache:
+        if a > b:
+            a, b = b, a
+        result = self.recipes_db.execute("SELECT result FROM recipes WHERE u = ? AND v = ?", (a, b)).fetchone()
+        if not result or result == self.local_nothing_indication:
             return None
-        result = self.recipes_cache[result_key(a, b)]
-        if result != self.local_nothing_indication and result not in self.items_cache:
-            # print(f"Missing {result} in cache!")
-            # print(f"{result}!!")
-            # Didn't get the emoji. Useful for upgrading from a previous version.
+        cur_emote = self.recipes_db.execute("SELECT emoji FROM items WHERE name = ?", (result[0],)).fetchone()
+        if not cur_emote:
             return None
-        return result
+        return result[0]
 
     # Adapted from analog_hors on Discord
     def combine(self, a: str, b: str) -> str:
+        if a > b:
+            a, b = b, a
         # Query local cache
         local_result = self.get_local(a, b)
         if local_result and local_result != self.local_nothing_indication:
@@ -187,6 +192,8 @@ class RecipeHandler:
         return r['result']
 
     def request_pair(self, a: str, b: str):
+        if a > b:
+            a, b = b, a
         # with requestLock:
         a_req = quote_plus(a)
         b_req = quote_plus(b)
@@ -201,7 +208,7 @@ class RecipeHandler:
             f"https://neal.fun/api/infinite-craft/pair?first={a_req}&second={b_req}",
             headers={
                 "Referer": "https://neal.fun/infinite-craft/",
-                "User-Agent": "curl/7.54.1",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
             },
         )
         while True:

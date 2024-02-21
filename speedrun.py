@@ -236,7 +236,7 @@ def combine_element_pairs():
 if __name__ == '__main__':
     # combine_element_pairs()
     # static_check_script('periodic_table_speedrun_v1.4.txt')
-    dynamic_check_script('periodic_table_speedrun_v1.4.txt')
-    add_element('periodic_table_speedrun_v1.4.txt',
-                             "Blue",
-                load_best_recipes('expanded_recipes_depth_9.txt'))
+    dynamic_check_script('periodic_table_speedrun_v1.4b.txt')
+    add_element('periodic_table_speedrun_v1.4b.txt',
+                             "Diamond",
+                load_best_recipes('expanded_recipes_depth_10.txt'))

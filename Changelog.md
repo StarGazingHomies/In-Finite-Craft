@@ -10,6 +10,13 @@ i9-13950HX,
 Note that power settings and the like can change between versions, so results
 are not comparable between them.
 
+## Version 1.3.2
+
+Since lapisfloof (on the r/InfiniteCraft Discord) decided to public their 30M database
+of relatively low-depth recipes, it's now necessary to rewrite the local saving system
+to use a database. I'm just taking this opportunity to learn about sqlite3.
+This reduces performance by ~20x.
+
 ## Version 1.3.1
 
 Added a double check for Nothing results, some other "Nothing" options,
