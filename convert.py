@@ -1,8 +1,5 @@
 import json
-import math
 import os
-import sqlite3
-
 from recipe import result_key
 from functools import cache
 
@@ -292,167 +289,31 @@ def ordered_total(cur_limit, cur_step, max_steps):
         ordered_total(cur_limit + 1, cur_step, max_steps)
 
 
-
-def pair_to_int(i: int, j: int) -> int:
-    if j < i:
-        i, j = j, i
-    return i + (j * (j + 1)) // 2
-
-
-# I don't know sql. Github copilot automatically generated this, and I did some google searches for modifications.
-def to_sqlite(file: str, output: str):
-    input("Warning: this will delete the existing recipes database. Press Enter to continue.")
-    conn = sqlite3.connect(output)
-    c = conn.cursor()
-    c.execute('''DROP TABLE IF EXISTS recipes''')
-    c.execute('''CREATE TABLE recipes 
-                 (u TEXT, 
-                 v TEXT, 
-                 result TEXT,
-                 PRIMARY KEY (u, v))''')
-    c.execute('''CREATE INDEX recipe_index ON recipes (u, v, result)''')
-    with open(file, "r") as f:
-        recipes = json.load(f)
-
-    print("File loading complete")
-    err_count = 0
-    skip_count = 0
-    for i, recipe in enumerate(recipes.items()):
-        if i % 10000 == 0:
-            print(f"Processed {i} of {len(recipes)} recipes")
-            conn.commit()
-
-        key, value = recipe
-        u, v = key.split("\t")
-        if "@" in u or "@" in v:
-            skip_count += 1
-            continue
-        if u > v:
-            u, v = v, u
-        try:
-            c.execute("INSERT INTO recipes (u, v, result) VALUES (?, ?, ?)", (u, v, value))
-        except TypeError:
-            err_count += 1
-            # print(u, v)
-            pass
-    print("Committing...")
-    conn.commit()
-    conn.close()
-    print(f"Done with {err_count} errors and {skip_count} skips.")
-
-
-def items_to_sqlite(file: str, output: str):
-    input("Warning: this will delete the existing items database. Press Enter to continue.")
-    conn = sqlite3.connect(output)
-    c = conn.cursor()
-    c.execute('''DROP TABLE IF EXISTS items''')
-    c.execute('''CREATE TABLE items
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                 name TEXT, 
-                 emoji TEXT, 
-                 discovered BOOLEAN)''')  # Autoincrement because we don't want reuse of IDs, even if nothing is deleted
-    c.execute('''CREATE INDEX item_name_index ON items (name)''')
-    with open(file, "r") as f:
-        items = json.load(f)
-    i = 0
-    items_list = items.items()
-    # Put water fire wind & earth in front
-    items_list = sorted(items_list, key=lambda x: x[0] not in ("Water", "Fire", "Wind", "Earth"))
-    for key, value in items_list:
-        c.execute("INSERT INTO items (id, name, emoji, discovered) VALUES (?, ?, ?, ?)", (i, key, value[0], value[1]))
-        i += 1
-    conn.commit()
-    conn.close()
-
-
-def merge_lapis(file1: str, file1_i: str, file2: str, output: str, output_i: str):
-    try:
-        recipes1 = json.load(open(file1, 'r'))
-        items1 = json.load(open(file1_i, 'r'))
-    except (IOError, ValueError):
-        print("Could not load recipe files", flush=True)
-        return
-
-    items2 = {}
-    with open(file2, "r", encoding="utf-8") as file:
-        data = json.loads(file.read())
-        elements = data["elements"]
-        recipes = data["recipes"]
-        for i, v in enumerate(recipes):
-            if (i + 1) % 100000 == 0:
-                print(f"Processed {i + 1} of {len(recipes)} recipes")
-            if v is None:
-                continue
-            i1_index = math.floor(0.5 * (math.sqrt(8 * i + 1) - 1))
-            i2_index = math.floor(i - (0.5 * i1_index * (i1_index + 1)))
-            i1 = elements[i1_index]
-            i2 = elements[i2_index]
-            res = elements[v] if v != -1 else {"t": "Nothing", "e": None}
-
-            key = result_key(i1["t"], i2["t"])
-            res_str = res["t"]
-            if "e" in res:
-                res_emote = [res["e"], False]
-            else:
-                res_emote = None
-
-            if key in recipes1:
-                if recipes1[key] != res_str:
-                    # key_pretty = key.replace('\t', ' + ')
-                    # print(f"Conflict: {key_pretty} -> {recipes1[key]} vs {res_str}")
-                    if recipes1[key] == "Nothing" or (recipes1[key] == "Nothing\t" and res_str != "Nothing"):
-                        recipes1[key] = res_str
-            else:
-                recipes1[key] = res_str
-
-            if res_str != "Nothing" and res_emote and res_str not in items2:
-                items2[res_str] = res_emote
-
-    for key, value in items2.items():
-        if key in items1:
-            pass
-            # if items1[key] != res_emote:
-            #     print(f"Conflict: {res_str} -> {items1[res_str]} vs {res_emote}")
-            # Prefer mine!
-        else:
-            items1[key] = value
-
-    save(recipes1, output)
-    save(items1, output_i)
-
-
 if __name__ == '__main__':
-    # merge_lapis(
-    #     "cache/recipes.json", "cache/items.json",
-    #     "cache/data3.json",
-    #     "cache/recipes_merged.json", "cache/items_merged.json"
-    # )
-    # items_to_sqlite("cache/items_merged.json", "cache/recipes.db")
-    to_sqlite("cache/recipes_merged.json", "cache/recipes.db")
     # print(ordered_total(0, 0, 9))  # 26248400230
     # print(ordered_total(4, 0, 9))
-    # new_recipes = convert_to_result_first("cache/relevant_recipes.json")
+    new_recipes = convert_to_result_first("cache/recipes.json")
     # new_recipes_list = list(new_recipes.items())
     # new_recipes_list.sort(key=lambda x: len(x[1]), reverse=True)
     # for key, value in new_recipes_list[:20]:
     #     print(f"{key}: {len(value)}")
     # save(new_recipes, "cache/v9.4/recipes_v9.4 nothing pruning result first.json")
-    # for recipe in new_recipes["Blue"]:
-    #     u, v = recipe.split('\t')
-    #     if u in ("Blue", "Cobalt") or v in ("Blue", "Cobalt"):
-    #         continue
-    #     print(f"{u} + {v}, ")
+    for recipe in new_recipes["Blue"]:
+        u, v = recipe.split('\t')
+        if u in ("Blue", "Cobalt") or v in ("Blue", "Cobalt"):
+            continue
+        print(f"{u} + {v}, ")
 
     # with open("cache/v9.4/recipes_v9.4 nothing pruning.json") as file:
     #     txt = file.read()
     #     print(txt.count("Nothing"))
-    # count_recipes("../cache/relevant_recipes.json")
+    # count_recipes("../cache/recipes.json")
     # print(load_analog_hors_json("../cache/db.json"))
-    # check_crafts("../cache/relevant_recipes.json", load_analog_hors_json("../cache/db.json"))
+    # check_crafts("../cache/recipes.json", load_analog_hors_json("../cache/db.json"))
     # check_recipes("best_recipes_depth_9_v1.txt", "best_recipes_depth_9_v2.txt")
-    # best_recipes_to_json("Depth 10/best_recipes.txt", "relevant_recipes.json")
-    # remove_new("cache/items.json", "cache/emojis.json")
-    # merge_recipe_files("cache/relevant_recipes.json", "cache/recipes_periodic.json", "cache/recipes_merged.json")
+    # best_recipes_to_json("../best_recipes.txt", "../relevant_recipes.json")
+    # remove_new("cache/backup - depth 9.8/items.json", "cache/backup - depth 9.8/emojis.json")
+    # merge_recipe_files("cache/recipes.json", "cache/recipes_periodic.json", "cache/recipes_merged.json")
     # merge_items_files("cache/items.json", "cache/items_periodic.json", "cache/items_merged.json")
     # remove_plus_duplicates("../cache/recipes_merged.json", "../cache/recipes_trim.json")
     # change_delimiter("../cache/recipes_trim.json", "../cache/recipes_tab.json")
