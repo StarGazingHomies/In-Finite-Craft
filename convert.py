@@ -1,60 +1,34 @@
 import json
+import math
 import os
-from recipe import result_key
 from functools import cache
+
+import bidict
+
+import recipe
+
+
+def result_key(a: str, b: str) -> str:
+    if a > b:
+        a, b = b, a
+    return a + "\t" + b
+
 
 
 def save(dictionary, file_name):
     try:
-        json.dump(dictionary, open(file_name, 'w'))
+        json.dump(dictionary, open(file_name, 'w', encoding='utf-8'), ensure_ascii=False)
     except FileNotFoundError:
-        print(f"Could not write to {file_name}! Trying to create a folder...", flush=True)
+        print(f"Could not write to {file_name}! Trying to create cache folder...", flush=True)
         try:
-            os.mkdir("cache")
-            json.dump(dictionary, open(file_name, 'w'))
+            os.mkdir("cache")  # TODO: generalize
+            json.dump(dictionary, open(file_name, 'w', encoding='utf-8'), ensure_ascii=False)
         except Exception as e:
             print(f"Could not create folder or write to file: {e}", flush=True)
             print(dictionary)
     except Exception as e:
         print(f"Unrecognized Error: {e}", flush=True)
         print(dictionary)
-
-
-def merge_recipe_files(file1: str, file2: str, output: str):
-    try:
-        recipes1 = json.load(open(file1, 'r'))
-        recipes2 = json.load(open(file2, 'r'))
-    except (IOError, ValueError):
-        print("Could not load recipe files", flush=True)
-        return
-
-    for key in recipes2:
-        if key not in recipes1:
-            recipes1[key] = recipes2[key]
-        if key in recipes1 and recipes2[key] != recipes1[key]:
-            print(f"Conflict: {key} -> {recipes1[key]} vs {recipes2[key]}")
-            if recipes1[key] == "Nothing\t" or (recipes1[key] == "Nothing" and recipes2[key] != "Nothing\t"):
-                recipes1[key] = recipes2[key]
-            print(f"Resolved: {key} -> {recipes1[key]}")
-
-    save(recipes1, output)
-
-
-def merge_items_files(file1: str, file2: str, output: str):
-    try:
-        items1 = json.load(open(file1, 'r'))
-        items2 = json.load(open(file2, 'r'))
-    except (IOError, ValueError):
-        print("Could not load items files", flush=True)
-        return
-
-    for key in items2:
-        if key not in items1:
-            items1[key] = items2[key]
-        if items2[key][1]:
-            items1[key] = items2[key]
-
-    save(items1, output)
 
 
 def best_recipes_to_json(recipe_file: str, output_file: str):
@@ -78,80 +52,6 @@ def best_recipes_to_json(recipe_file: str, output_file: str):
                 relevant_recipes[output] = [(u.strip(), v.strip())]
 
     save(relevant_recipes, output_file)
-
-
-def best_recipes_to_tsv(recipe_file: str, output_file: str):
-    try:
-        with open(recipe_file, "r") as fin:
-            lines = fin.readlines()
-    except (IOError, ValueError):
-        print("Could not load recipe file", flush=True)
-        return
-
-    relevant_recipes = []
-    for line in lines:
-        if '->' in line:
-            output = line.split("->")[1].strip()
-            inputs = line.split("->")[0].strip()
-            u, v = inputs.split("+")
-            relevant_recipes.append([u.strip(), v.strip(), output])
-
-    with open(output_file, "w") as fout:
-        for recipe in relevant_recipes:
-            fout.write(f"{recipe[0]}\t{recipe[1]}\t{recipe[2]}\n")
-
-
-def remove_new(items_file: str, new_items_file: str):
-    file = json.load(open(items_file, 'r'))
-    new = {}
-    for key, value in file.items():
-        new[key] = value[0]
-    json.dump(new, open(new_items_file, 'w'))
-
-
-def recipe_to_csv(recipe_file: str, new_file: str):
-    file = json.load(open(recipe_file, 'r'))
-    with open(new_file, "w") as f:
-        for items, result in file.items():
-            try:
-                u, v = items.split(" + ")
-                u = u.replace("+", "")
-                v = v.replace("+", "")
-            except ValueError:
-                print(items)
-            f.write(f"{u}\t{v}\t{result}\n")
-
-
-def remove_plus_duplicates(recipe_file: str, new_file: str):
-    with open(recipe_file, "r") as f:
-        recipes = json.load(f)
-    new_recipes = {}
-    for key, value in recipes.items():
-        try:
-            u, v = key.split(" + ")
-            u = u.replace("+", " ")
-            v = v.replace("+", " ")
-        except ValueError:
-            continue
-        new_recipes[result_key(u, v)] = value
-    with open(new_file, "w") as f:
-        json.dump(new_recipes, f)
-
-
-def change_delimiter(file: str, new_file: str):
-    with open(file, "r") as f:
-        recipes = json.load(f)
-
-    new_recipes = {}
-    for key, value in recipes.items():
-        if key.count(" + ") > 1:
-            continue  # Sorry, but re-request
-        u, v = key.split(" + ")
-        new_recipes[u + "\t" + v] = value
-
-    with open(new_file, "w") as f:
-        json.dump(new_recipes, f)
-
 
 def modify_save_file(file: str, items_file: str, new_file: str):
     with open(file, "r", encoding='utf-8') as f:
@@ -268,6 +168,125 @@ def check_recipes(file1, file2):
                 print(f"Missing {v} at depth {i} in 1st book")
 
 
+def pair_to_int(i: int, j: int) -> int:
+    if j < i:
+        i, j = j, i
+    return i + (j * (j + 1)) // 2
+
+
+def convert_to_id(recipes_file: str, items_file: str, output_recipes: str, output_items: str):
+    with open(recipes_file, "r") as f:
+        recipes = json.load(f)
+    with open(items_file, "r") as f:
+        items = json.load(f)
+
+    new_items = {"Water": ["", 0, False],
+                 "Fire": ["", 1, False],
+                 "Wind": ["", 2, False],
+                 "Earth": ["", 3, False]}
+    item_ids: bidict.bidict[str, int] = bidict.bidict()
+    item_ids["Nothing\t"] = -2
+    item_ids["Nothing"] = -1
+    item_ids["Water"] = 0
+    item_ids["Fire"] = 1
+    item_ids["Wind"] = 2
+    item_ids["Earth"] = 3
+    new_recipes = {}
+    items_count = 4
+    for item in items:
+        if item in ("Nothing", "Nothing\t"):
+            continue
+        if item in new_items:
+            original_id = new_items[item][1]
+            new_items[item] = [items[item][0], original_id, items[item][1]]
+            continue
+
+        new_items[item] = [items[item][0], items_count, items[item][1]]
+        item_ids[item] = items_count
+        items_count += 1
+
+    def new_result_key(a: str, b: str) -> str:
+        id1 = item_ids[a]
+        id2 = item_ids[b]
+        return str(pair_to_int(id1, id2))
+
+    for key, value in recipes.items():
+        u, v = key.split("\t")
+        if u in ("Nothing", "Nothing\t") or v in ("Nothing", "Nothing\t"):
+            continue
+        if u not in item_ids:
+            new_items[u] = ["", items_count, False]
+            item_ids[u] = items_count
+            items_count += 1
+        if v not in item_ids:
+            new_items[v] = ["", items_count, False]
+            item_ids[v] = items_count
+            items_count += 1
+        if value not in item_ids:
+            new_items[value] = ["", items_count, False]
+            item_ids[value] = items_count
+            items_count += 1
+        # print(u, v, value, u in new_items, v in new_items, value in new_items)
+        # if value == "Nothing" or value == "Nothing\t":
+        #     print(item_ids[value])
+
+        new_recipes[new_result_key(u, v)] = item_ids[value]
+
+    with open(output_items, "w", encoding='utf-8') as f:
+        json.dump(new_items, f, ensure_ascii=False)
+
+    with open(output_recipes, "w", encoding='utf-8') as f:
+        json.dump(new_recipes, f, ensure_ascii=False)
+
+
+def merge_lapis(file2: str):
+    recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
+
+    with open(file2, "r", encoding="utf-8") as file:
+        data = json.loads(file.read())
+        elements = data["elements"]
+        recipes = data["recipes"]
+        for i, v in enumerate(recipes):
+            if (i + 1) % 100000 == 0:
+                print(f"Processed {i + 1} of {len(recipes)} recipes")
+            if v is None:
+                continue
+            i1_index = math.floor(0.5 * (math.sqrt(8 * i + 1) - 1))
+            i2_index = math.floor(i - (0.5 * i1_index * (i1_index + 1)))
+            i1 = elements[i1_index]
+            i2 = elements[i2_index]
+            res = elements[v] if v != -1 else {"t": "Nothing\t", "e": ''}
+
+            res_str = res["t"]
+            if "e" in res:
+                res_emote = res["e"]
+            else:
+                res_emote = None
+
+            # print(f"Adding {i1['t']} + {i2['t']} -> {res_str} with emote {res_emote}")
+            # input()
+            result_id = recipe_handler.add_item(res_str, res_emote, False)
+            recipe_handler.add_recipe(i1["t"], i2["t"], result_id)
+
+
+def merge_old(file_r: str, file_i: str):
+    recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
+
+    with open(file_r, "r") as f:
+        recipes = json.load(f)
+    with open(file_i, "r") as f:
+        items = json.load(f)
+
+    for key, value in items.items():
+        recipe_handler.add_item(key, value[0], value[1])
+
+    for key, value in recipes.items():
+        u, v = key.split("\t")
+        r = recipe_handler.add_item(value, "", False)
+        recipe_handler.add_recipe(u, v, r)
+
+
+
 @cache
 def limit(n: int) -> int:
     return n * (n + 1) // 2
@@ -282,39 +301,26 @@ def ordered_total(cur_limit, cur_step, max_steps):
         return 1
     if cur_limit >= limit(cur_step + init_list_size):
         return 0
+    if cur_step == max_steps - 1 and cur_step != 0:
+        return limit(cur_step + init_list_size + 1) - limit(cur_step + init_list_size)
 
     # print(f"Step {cur_step} with limit {cur_limit} has {s} recipes")
     return \
-        ordered_total(cur_limit + 1, cur_step + 1, max_steps) + \
-        ordered_total(cur_limit + 1, cur_step, max_steps)
+            ordered_total(cur_limit + 1, cur_step + 1, max_steps) + \
+            ordered_total(cur_limit + 1, cur_step, max_steps)
 
 
 if __name__ == '__main__':
+    merge_old("cache/recipes_o.json", "cache/items_o.json")
     # print(ordered_total(0, 0, 9))  # 26248400230
-    # print(ordered_total(4, 0, 9))
-    new_recipes = convert_to_result_first("cache/recipes.json")
-    # new_recipes_list = list(new_recipes.items())
-    # new_recipes_list.sort(key=lambda x: len(x[1]), reverse=True)
-    # for key, value in new_recipes_list[:20]:
-    #     print(f"{key}: {len(value)}")
-    # save(new_recipes, "cache/v9.4/recipes_v9.4 nothing pruning result first.json")
-    for recipe in new_recipes["Blue"]:
-        u, v = recipe.split('\t')
-        if u in ("Blue", "Cobalt") or v in ("Blue", "Cobalt"):
-            continue
-        print(f"{u} + {v}, ")
-
-    # with open("cache/v9.4/recipes_v9.4 nothing pruning.json") as file:
-    #     txt = file.read()
-    #     print(txt.count("Nothing"))
-    # count_recipes("../cache/recipes.json")
-    # print(load_analog_hors_json("../cache/db.json"))
-    # check_crafts("../cache/recipes.json", load_analog_hors_json("../cache/db.json"))
-    # check_recipes("best_recipes_depth_9_v1.txt", "best_recipes_depth_9_v2.txt")
-    # best_recipes_to_json("../best_recipes.txt", "../relevant_recipes.json")
-    # remove_new("cache/backup - depth 9.8/items.json", "cache/backup - depth 9.8/emojis.json")
-    # merge_recipe_files("cache/recipes.json", "cache/recipes_periodic.json", "cache/recipes_merged.json")
-    # merge_items_files("cache/items.json", "cache/items_periodic.json", "cache/items_merged.json")
-    # remove_plus_duplicates("../cache/recipes_merged.json", "../cache/recipes_trim.json")
-    # change_delimiter("../cache/recipes_trim.json", "../cache/recipes_tab.json")
-    # modify_save_file("infinitecraft_save.json", "cache/items.json", "infinitecraft_modified.json")
+    # print(ordered_total(0, 0, 15))
+    # for i in range(15):
+    #     print(i, ordered_total(0, 0, i))
+    # other_save = json.load(open("infinitecraft (2).json", 'r', encoding='utf-8'))
+    # print(len(other_save["elements"]))
+    # counter = 0
+    # for v in other_save["elements"]:
+    #     if v["discovered"]:
+    #         counter += 1
+    # print(counter)
+    # convert_to_id("cache/recipes.json", "cache/items.json", "cache/recipes_id.json", "cache/items_id.json")

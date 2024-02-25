@@ -6,7 +6,6 @@ import recipe
 
 # import tracemalloc
 
-recipe_handler = recipe.RecipeHandler()
 # init_state: tuple[str, ...] = ("1", )
 init_state: tuple[str, ...] = ("Water", "Fire", "Wind", "Earth")
 # "Lake", "Lava", "Stone", "Rock", "Lighthouse", "Hermit", "Sphinx", "Oedpius",
@@ -43,6 +42,7 @@ elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Ni
             "Nihonium", "Flerovium", "Moscovium", "Livermorium", "Tennessine", "Oganesson"]
 
 # init_state = tuple(list(init_state) + elements + ["Periodic Table",])
+recipe_handler = recipe.RecipeHandler(init_state)
 
 
 @cache
@@ -270,8 +270,8 @@ def iterative_deepening_dfs():
         print(f"{curDepth}   {len(visited)}     {time.perf_counter() - start_time:.4f}")
         # print(best_recipes)
         # print(flush=True)
-        if curDepth == 10:
-            break
+        # if curDepth == 10:
+        #     break
         # Only relevant for local files - if exhausted the outputs, stop
         if len(visited) == prev_visited:
             break

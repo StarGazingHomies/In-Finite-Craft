@@ -125,7 +125,7 @@ def count_uses(filename: str):
 
 def load_best_recipes(filename: str) -> dict[str, list[list[tuple[str, str, str]]]]:
     # Loading the all best recipes file for easy element adding
-    with open(filename, 'r') as file:
+    with open(filename, 'r', encoding='utf-8') as file:
         lines = file.readlines()
 
     recipes: dict[str, list[list[tuple[str, str, str]]]] = {}
@@ -236,7 +236,18 @@ def combine_element_pairs():
 if __name__ == '__main__':
     # combine_element_pairs()
     # static_check_script('periodic_table_speedrun_v1.4.txt')
-    dynamic_check_script('periodic_table_speedrun_v1.4.txt')
-    add_element('periodic_table_speedrun_v1.4.txt',
-                             "Blue",
-                load_best_recipes('expanded_recipes_depth_9.txt'))
+    best_recipes = load_best_recipes('expanded_recipes_depth_10.txt')
+    count = 0
+    for key in best_recipes:
+        for c in key:
+            if c.isalnum():
+                continue
+            if c == ' ':
+                continue
+            print(key)
+            break
+    print(count)
+    # dynamic_check_script('periodic_table_speedrun_v1.4.txt')
+    # add_element('periodic_table_speedrun_v1.4.txt',
+    #                          "Blue",
+    #             load_best_recipes('expanded_recipes_depth_9.txt'))

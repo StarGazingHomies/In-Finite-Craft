@@ -10,6 +10,11 @@ i9-13950HX,
 Note that power settings and the like can change between versions, so results
 are not comparable between them.
 
+## Version 1.3.2
+
+Added some compression by using ids for items.
+
+
 ## Version 1.3.1
 
 Added a double check for Nothing results, some other "Nothing" options,
