@@ -9,6 +9,8 @@ from functools import cache
 from typing import Optional
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
+
+import aiohttp
 from bidict import bidict
 
 DELIMITER = "\t"
@@ -185,7 +187,7 @@ class RecipeHandler:
         return result_str
 
     # Adapted from analog_hors on Discord
-    def combine(self, a: str, b: str) -> str:
+    async def combine(self, session: aiohttp.ClientSession, a: str, b: str) -> str:
         # Query local cache
         local_result = self.get_local(a, b)
         if local_result and local_result != self.local_nothing_indication:
@@ -195,11 +197,7 @@ class RecipeHandler:
             return "Nothing"
 
         # print(f"Requesting {a} + {b}", flush=True)
-        with self.request_pair(a, b) as result:
-            r = json.load(result)
-            # last_result = result.__dict__
-            # last_result['headers'] = str(last_result['headers'].__dict__)
-            # last_r = r
+        r = await self.request_pair(session, a, b)
 
         nothing_count = 1
         while (local_result != self.local_nothing_indication and  # "Nothing" in local cache is long, long ago
@@ -211,22 +209,14 @@ class RecipeHandler:
             time.sleep(self.nothing_cooldown)
             print("Re-requesting Nothing result...", flush=True)
 
-            with self.request_pair(a, b) as result:
-                r = json.load(result)
-                # if (r['result'] != "Nothing") and (r['result'] != last_r['result']):
-                #     print(f"WARNING: Inconsistent Nothing result: {last_r['result']} -> {r['result']}")
-                #     # Save the full Nothing response to a different file
-                #     save_nothing(a, b, {"Resp": last_result,
-                #                         "Result": last_r})
-                # last_result = result.__dict__
-                # last_r = r
+            r = await self.request_pair(session, a, b)
 
             nothing_count += 1
 
         self.save_response(a, b, r)
         return r['result']
 
-    def request_pair(self, a: str, b: str):
+    async def request_pair(self, session: aiohttp.ClientSession, a: str, b: str) -> dict:
         # with requestLock:
         a_req = quote_plus(a)
         b_req = quote_plus(b)
@@ -237,20 +227,14 @@ class RecipeHandler:
             time.sleep(self.request_cooldown - (t - self.last_request))
         self.last_request = time.perf_counter()
 
-        request = Request(
-            f"https://neal.fun/api/infinite-craft/pair?first={a_req}&second={b_req}",
-            headers={
-                "Referer": "https://neal.fun/infinite-craft/",
-                "User-Agent": "curl/7.54.1",
-            },
-        )
+        url = f"https://neal.fun/api/infinite-craft/pair?first={a_req}&second={b_req}"
+
         while True:
             try:
-                response = urlopen(request, timeout=self.connection_timeout)
-                # raise Exception(f"HTTP {response.getcode()}: {response.reason}")
-                # Reset exponential retrying
-                self.sleep_time = self.sleep_default
-                return response
+                # print(url, type(url))
+                async with session.get(url) as resp:
+                    self.sleep_time = self.sleep_default
+                    return await resp.json()
             except urllib.error.HTTPError as e:
                 print(e, file=sys.stderr)
                 time.sleep(self.sleep_time)

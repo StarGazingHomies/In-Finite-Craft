@@ -1,6 +1,10 @@
+import asyncio
 import time
 from functools import cache
 from typing import Optional
+from urllib.parse import quote_plus
+
+import aiohttp
 
 import recipe
 
@@ -100,14 +104,14 @@ class GameState:
     def __hash__(self):
         return hash(str(self.state))
 
-    def child(self, i: int) -> Optional['GameState']:
+    async def child(self, session: aiohttp.ClientSession, i: int) -> Optional['GameState']:
         # Invalid indices
         if i <= self.tail_index() or i >= limit(len(self)):
             return None
 
         # Craft the items
         u, v = int_to_pair(i)
-        craft_result = recipe_handler.combine(self.items[u], self.items[v])
+        craft_result = await recipe_handler.combine(session, self.items[u], self.items[v])
 
         # Invalid crafts, items we already have, or items that can be crafted earlier are ignored.
         if (craft_result is None or
@@ -171,9 +175,10 @@ def process_node(state: GameState):
 
 
 # Depth limited search
-def dls(state: GameState, depth: int) -> int:
+async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> int:
     """
     Depth limited search
+    :param session: The session to use
     :param state: The current state
     :param depth: The depth remaining
     :return: The number of states processed
@@ -197,9 +202,9 @@ def dls(state: GameState, depth: int) -> int:
     elif len(unused_items) > depth:  # We must start using unused elements NOW.
         for j in range(len(unused_items)):  # For loop ordering is important. We want increasing pair_to_int order.
             for i in range(j):  # i != j. We have to use two for unused_items to decrease.
-                child = state.child(pair_to_int(unused_items[i], unused_items[j]))
+                child = await state.child(pair_to_int(unused_items[i], unused_items[j]))
                 if child is not None:
-                    count += dls(child, depth - 1)
+                    count += dls(session, child, depth - 1)
         return count
     # TODO: elif len(unused_items) == depth might be a useful pruning case. Not gonna bother right now.
     else:
@@ -208,14 +213,14 @@ def dls(state: GameState, depth: int) -> int:
             lower_limit = limit(len(state) - 1)
 
         for i in range(lower_limit, limit(len(state))):  # Regular ol' searching
-            child = state.child(i)
+            child = await state.child(session, i)
             if child is not None:
-                count += dls(child, depth - 1)
+                count += await dls(session, child, depth - 1)
 
         return count
 
 
-def iterative_deepening_dfs():
+async def iterative_deepening_dfs(session: aiohttp.ClientSession):
     open(best_recipes_file, "w").close()
 
     curDepth = 1
@@ -246,7 +251,8 @@ def iterative_deepening_dfs():
 
     while True:
         prev_visited = len(visited)
-        print(dls(
+        print(await dls(
+            session,
             GameState(
                 list(init_state),
                 [-1 for _ in range(len(init_state))],
@@ -293,11 +299,26 @@ def iterative_deepening_dfs():
     #         file.write("\n-----------------------------------------------\n")
 
 
-def main():
+async def main():
     # tracemalloc.start()
-    iterative_deepening_dfs()
+    headers = {
+        "Referer": "https://neal.fun/infinite-craft/",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    }
+    async with aiohttp.ClientSession(headers=headers) as session:
+        async with session.get("https://neal.fun/infinite-craft/") as resp:
+            print("Status:", resp.status)
+            print("Content-type:", resp.headers['content-type'])
+
+            html = await resp.text()
+            print("Body:", html[:15], "...")
+            cookies = session.cookie_jar.filter_cookies('https://neal.fun/infinite-craft/')
+            for key, cookie in cookies.items():
+                print('Key: "%s", Value: "%s"' % (cookie.key, cookie.value))
+
+        await iterative_deepening_dfs(session)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
     # print("\", \"".join(elements.split('\n')))
