@@ -1,19 +1,20 @@
 import atexit
 import json
+import math
 import os
 import sys
 import time
 import traceback
-import urllib.error
-from functools import cache
 from typing import Optional
 from urllib.parse import quote_plus
-from urllib.request import Request, urlopen
 
 import aiohttp
 from bidict import bidict
 
-DELIMITER = "\t"
+
+# TODO: Implement a proper db, like Postgresql
+
+
 WORD_TOKEN_LIMIT = 20
 WORD_COMBINE_CHAR_LIMIT = 30
 
@@ -24,9 +25,16 @@ def pair_to_int(i: int, j: int) -> int:
     return i + (j * (j + 1)) // 2
 
 
+def int_to_pair(n: int) -> tuple[int, int]:
+    j = math.floor(((8 * n + 1) ** 0.5 - 1) / 2)
+    i = n - (j * (j + 1)) // 2
+    return i, j
+
+
 def load_json(file_name):
     try:
-        return json.load(open(file_name, 'r', encoding='utf-8'))
+        with open(file_name, 'r', encoding='utf-8') as fin:
+            return json.load(fin)
     except FileNotFoundError:
         return {}
 
@@ -67,9 +75,9 @@ class RecipeHandler:
     items_cache: dict[str, tuple[str, int, bool]]
     items_id: bidict[str, int]
     recipes_changes: int = 0
-    recipe_autosave_interval: int = 10000000
+    recipe_autosave_interval: int = 3000
     items_changes: int = 0
-    items_autosave_interval: int = 100000
+    items_autosave_interval: int = 100
     item_count: int = 0
     recipes_file: str = "cache/recipes.json"
     items_file: str = "cache/items.json"
@@ -147,7 +155,7 @@ class RecipeHandler:
 
     def add_recipe(self, a: str, b: str, result: int):
         if self.result_key(a, b) not in self.recipes_cache or \
-                self.recipes_cache[self.result_key(a, b)] != result:
+                (self.recipes_cache[self.result_key(a, b)] != result and result != -2): # -2 is local_nothing_indication
             self.recipes_cache[self.result_key(a, b)] = result
             self.recipes_changes += 1
             if self.recipes_changes % self.recipe_autosave_interval == 0:
@@ -166,7 +174,7 @@ class RecipeHandler:
         result_id = self.add_item(result, emoji, new)
 
         # Save as the fake nothing if it's the first run
-        if result == "Nothing" and result not in self.recipes_cache and self.trust_first_run_nothing:
+        if result == "Nothing" and result not in self.recipes_cache and not self.trust_first_run_nothing:
             result = self.local_nothing_indication
             result_id = self.items_id[result]
 
@@ -177,6 +185,9 @@ class RecipeHandler:
         if self.result_key(a, b) not in self.recipes_cache:
             return None
         result = self.recipes_cache[self.result_key(a, b)]
+        if result not in self.items_id.inverse:
+            return None
+
         result_str = self.items_id.inverse[result]
 
         # Didn't get the emoji. Useful for upgrading from a previous version.
@@ -186,10 +197,35 @@ class RecipeHandler:
             return None
         return result_str
 
+    def get_local_results_for(self, r: str) -> list[tuple[str, str]]:
+        if r not in self.items_cache:
+            return []
+
+        result_id = self.items_id[r]
+        recipes = []
+        for ingredients, result in self.recipes_cache.items():
+            if result == result_id:
+                a, b = int_to_pair(int(ingredients))
+                recipes.append((self.items_id.inverse[a], self.items_id.inverse[b]))
+        return recipes
+
+    def get_local_results_using(self, a: str) -> list[tuple[str, str, str]]:
+        if a not in self.items_cache:
+            return []
+
+        recipes = []
+        for other in self.items_cache:
+            result = self.recipes_cache.get(self.result_key(a, other))
+            if not result:
+                continue
+            recipes.append((a, other, self.items_id.inverse[result]))
+        return recipes
+
     # Adapted from analog_hors on Discord
     async def combine(self, session: aiohttp.ClientSession, a: str, b: str) -> str:
         # Query local cache
         local_result = self.get_local(a, b)
+        # print(f"Local result: {a} + {b} -> {local_result}")
         if local_result and local_result != self.local_nothing_indication:
             return local_result
 
@@ -201,8 +237,8 @@ class RecipeHandler:
 
         nothing_count = 1
         while (local_result != self.local_nothing_indication and  # "Nothing" in local cache is long, long ago
-               r['result'] == "Nothing" and  # Still getting "Nothing" from the API
-               nothing_count < self.nothing_verification):  # We haven't verified "Nothing" enough times
+               r['result'] == "Nothing" and                       # Still getting "Nothing" from the API
+               nothing_count < self.nothing_verification):        # We haven't verified "Nothing" enough times
             # Request again to verify, just in case...
             # Increases time taken on requests but should be worth it.
             # Also note that this can't be asynchronous due to all the optimizations I made assuming a search order
@@ -233,13 +269,15 @@ class RecipeHandler:
             try:
                 # print(url, type(url))
                 async with session.get(url) as resp:
-                    self.sleep_time = self.sleep_default
-                    return await resp.json()
-            except urllib.error.HTTPError as e:
-                print(e, file=sys.stderr)
-                time.sleep(self.sleep_time)
-                self.sleep_time *= self.retry_exponent
-                print("Retrying...", flush=True)
+                    print(resp.status)
+                    if resp.status == 200:
+                        self.sleep_time = self.sleep_default
+                        return await resp.json()
+                    else:
+                        print(f"Request failed with status {resp.status}", file=sys.stderr)
+                        time.sleep(self.sleep_time)
+                        self.sleep_time *= self.retry_exponent
+                        print("Retrying...", flush=True)
             except Exception as e:
                 # Handling more than just that one error
                 print("Unrecognized Error: ", e, file=sys.stderr)

@@ -1,35 +1,22 @@
-import asyncio
+import os
 import time
 from functools import cache
 from typing import Optional
 from urllib.parse import quote_plus
 
+import json
+import asyncio
 import aiohttp
 
 import recipe
 
 # import tracemalloc
 
-# init_state: tuple[str, ...] = ("1", )
+
 init_state: tuple[str, ...] = ("Water", "Fire", "Wind", "Earth")
-# "Lake", "Lava", "Stone", "Rock", "Lighthouse", "Hermit", "Sphinx", "Oedpius",
-# "Oedipus Rex", "Sophocles")
-# init_state: tuple[str, ...] = ('Earth', 'Fire', 'Water', 'Wind', 'Dust', 'Ash', 'Phoenix', 'Rebirth', 'Fish', 'Dragon', 'Yin Yang', 'Feng Shui', 'Dust Bunny', 'Opposite')
-# init_state: tuple[str, ...] = ('Earth', 'Fire', 'Water', 'Wind', 'Smoke', 'Plant', 'Incense', 'Prayer', 'Candle',
-#                                'Oxygen', 'Hydrogen', 'Dandelion', 'Helium', 'Lava', 'Stone', 'Obsidian', 'Diamond',
-#                                'Carbon', 'Wave', 'Fossil', 'Ammonite', 'Ammonia', 'Ammonium', 'Nitrogen', 'Ocean',
-#                                'Dust', 'Ash', 'Salt', 'Sodium', 'Sandstorm', 'Oasis', 'Planet', 'Sun', 'Solar',
-#                                'System', 'Computer', 'Silicon', 'Perfume', 'Smell', 'Sulfur', 'Emerald', 'Green',
-#                                'Chlorine', 'Weed', 'Pot', 'Potash', 'Potassium', 'Swamp', 'Dragon', 'Sea Serpent',
-#                                'Leviathan', 'Titan', 'Dragon Egg', 'Titanium', 'Steam', 'Engine', 'Rocket',
-#                                'Satellite', 'Lake', 'Google', 'FireFox', 'Chrome', 'Chromium', 'Vacuum', 'Clean',
-#                                'Iron', 'Wine', 'Poison', 'Murder', 'Arsenic', 'Fish', 'Starfish', 'Flying Starfish',
-#                                'Superman', 'Krypton', 'Metal', 'Silver', 'Steel', 'Tin', 'Mountain', 'Dragonfly',
-#                                'Ant', 'Antfly', 'Antimony', 'Gold', 'Mars', 'Venus', 'Mercury', 'Saturn', 'Lead',
-#                                'Tobacco', 'Uranus', 'Urine', 'Uranium', 'Pluto', 'Plutonium', 'Platinum', 'Argentum',
-#                                'Pewter', 'Periodic Table')
 
 
+# For people who want to start with a lot more things
 elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Nitrogen", "Oxygen", "Fluorine", "Neon",
             "Sodium", "Magnesium", "Aluminium", "Silicon", "Phosphorus", "Sulfur", "Chlorine", "Argon", "Potassium",
             "Calcium", "Scandium", "Titanium", "Vanadium", "Chromium", "Manganese", "Iron", "Cobalt", "Nickel",
@@ -45,9 +32,32 @@ elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Ni
             "Dubnium", "Seaborgium", "Bohrium", "Hassium", "Meitnerium", "Darmstadtium", "Roentgenium", "Copernicium",
             "Nihonium", "Flerovium", "Moscovium", "Livermorium", "Tennessine", "Oganesson"]
 
+letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
+           "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
+           "U", "V", "W", "X", "Y", "Z"]
+
+# If capitalization matters...
+# letters2 = ["AA", "Ab", "Ac", "Ad", "AE", "AF", "Ag", "AH", "Ai", "Aj", "AK", "Al", "Am", "An", "AO", "AP", "AQ", "Ar", "As", "At", "Au", "Av", "AW", "Ax", "AY", "Az",
+#             "BA", "Bb", "BC", "BD", "Be", "BF", "BG", "BH", "Bi", "BJ", "BK", "BL", "BM", "Bn", "BO", "BP", "BQ", "BR", "BS", "BT", "BU", "BV", "BW", "Bx", "BY", "Bz"]
+# Not going to continue for now.
+
+letters2 = []
+for l1 in letters:
+    for l2 in letters:
+        letters2.append(l1 + l2)
+
 # init_state = tuple(list(init_state) + elements + ["Periodic Table",])
+# init_state = tuple(list(init_state) + letters + letters2)
 recipe_handler = recipe.RecipeHandler(init_state)
 
+best_recipes: dict[str, list['GameState']] = dict()
+visited = set()
+best_depths: dict[str, int] = dict()
+best_recipes_file: str = "best_recipes.txt"
+all_best_recipes_file: str = "all_best_recipes.json"
+extra_depth = 0
+save_all_best_recipes: bool = False
+respect_case: bool = True
 
 @cache
 def int_to_pair(n: int) -> tuple[int, int]:
@@ -104,6 +114,15 @@ class GameState:
     def __hash__(self):
         return hash(str(self.state))
 
+    def to_list(self) -> list[tuple[str, str, str]]:
+        l: list[tuple[str, str, str]] = []
+        for i in range(len(self.state)):
+            left, right = int_to_pair(self.state[i])
+            if (left < 0) or (right < 0):
+                continue
+            l.append((self.items[left], self.items[right], self.items[i]))
+        return l
+
     async def child(self, session: aiohttp.ClientSession, i: int) -> Optional['GameState']:
         # Invalid indices
         if i <= self.tail_index() or i >= limit(len(self)):
@@ -116,7 +135,7 @@ class GameState:
         # Invalid crafts, items we already have, or items that can be crafted earlier are ignored.
         if (craft_result is None or
                 craft_result == "Nothing" or
-                craft_result in self.items or # TODO: Temporary ignore for elements search
+                craft_result in self.items or  # TODO: Temporary ignore for elements search
                 # craft_result == self.items[u] or craft_result == self.items[v] or
                 # (craft_result in self.items and self.used[self.items.index(craft_result)] != 0) or
                 # Even though we are looking for results in the original list, we still
@@ -149,29 +168,32 @@ class GameState:
         return self.state[-1]
 
 
-best_recipes: dict[str, list[GameState]] = dict()
-visited = set()
-best_depths: dict[str, int] = dict()
-best_recipes_file: str = "best_recipes.txt"
-# all_best_recipes_file: str = "expanded_elements_recipes.txt"
-all_best_recipes_file: str = "expanded_recipes_depth_10.txt"
-extra_depth = 0
-
-
 def process_node(state: GameState):
-    if state.tail_item() not in visited:
-        visited.add(state.tail_item())
-        #  Dumb writing to file
-        # if state.tail_item() in elements:
-        with open(best_recipes_file, "a", encoding="utf-8") as file:
-            file.write(str(len(visited)) + ": " + str(state) + "\n\n")
+    # TODO: Only enable for 3-letter search
+    # if len(state.tail_item()) != 3 or not state.tail_item().isalpha():
+    #     return
+
+    if respect_case:
+        if state.tail_item() not in visited:
+            visited.add(state.tail_item())
+            #  Dumb writing to file
+            with open(best_recipes_file, "a", encoding="utf-8") as file:
+                file.write(str(len(visited)) + ": " + str(state) + "\n\n")
+    else:
+        if state.tail_item().upper() not in visited:
+            visited.add(state.tail_item().upper())
+            #  Dumb writing to file
+            with open(best_recipes_file, "a", encoding="utf-8") as file:
+                file.write(str(len(visited)) + ": " + str(state) + "\n\n")
+
     # Multiple recipes for the same item at same depth
-    # depth = len(state) - len(init_state)
-    # if state.tail_item() not in best_depths:
-    #     best_depths[state.tail_item()] = depth
-    #     best_recipes[state.tail_item()] = [state,]
-    # elif depth <= best_depths[state.tail_item()] + extra_depth:
-    #     best_recipes[state.tail_item()].append(state)
+    if save_all_best_recipes:
+        depth = len(state) - len(init_state)
+        if state.tail_item() not in best_depths:
+            best_depths[state.tail_item()] = depth
+            best_recipes[state.tail_item()] = [state,]
+        elif depth <= best_depths[state.tail_item()] + extra_depth:
+            best_recipes[state.tail_item()].append(state)
 
 
 # Depth limited search
@@ -187,7 +209,7 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
         process_node(state)
         return 1
 
-    # 30 token limit, according to PB and laurasia
+    # 30 char limit, according to PB and laurasia
     if len(state.tail_item()) > recipe.WORD_COMBINE_CHAR_LIMIT:
         return 0
 
@@ -202,9 +224,9 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
     elif len(unused_items) > depth:  # We must start using unused elements NOW.
         for j in range(len(unused_items)):  # For loop ordering is important. We want increasing pair_to_int order.
             for i in range(j):  # i != j. We have to use two for unused_items to decrease.
-                child = await state.child(pair_to_int(unused_items[i], unused_items[j]))
+                child = await state.child(session, pair_to_int(unused_items[i], unused_items[j]))
                 if child is not None:
-                    count += dls(session, child, depth - 1)
+                    count += await dls(session, child, depth - 1)
         return count
     # TODO: elif len(unused_items) == depth might be a useful pruning case. Not gonna bother right now.
     else:
@@ -221,33 +243,11 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
 
 
 async def iterative_deepening_dfs(session: aiohttp.ClientSession):
+    # Clear best recipes file
     open(best_recipes_file, "w").close()
 
     curDepth = 1
-
     start_time = time.perf_counter()
-
-    # Recipe Analysis
-
-    # with open("best_recipes_depth_9.txt", "r", encoding='utf-8') as fin:
-    #     lines = fin.readlines()
-    #
-    # recipes = [set() for _ in range(10)]
-    # cur_recipe = ""
-    # cur_recipe_depth = -1
-    # for line in lines:
-    #     if line.strip() == "":
-    #         output = cur_recipe.split(":")[1].strip()
-    #         recipes[cur_recipe_depth].add(output)
-    #
-    #         cur_recipe = ""
-    #         cur_recipe_depth = -1
-    #     else:
-    #         cur_recipe += line
-    #         cur_recipe_depth += 1
-    # sizes = [len(x) for x in recipes]
-    # # print(recipes)
-    # print([sum(sizes[:i+1]) for i in range(1, len(sizes))])
 
     while True:
         prev_visited = len(visited)
@@ -261,42 +261,20 @@ async def iterative_deepening_dfs(session: aiohttp.ClientSession):
             ),
             curDepth))
 
-        # print(len(visited))
-        #
-        # for i in range(curDepth + 1):
-        #     for v in recipes[i]:
-        #         if v not in visited:
-        #             print(f"Missing {v} at depth {i}")
-
-        # Performance
-        # current, peak = tracemalloc.get_traced_memory()
-        # print(f"Current memory usage is {current / 2**20}MB; Peak was {peak / 2**20}MB")
-        # print(f"Current time elapsed: {time.perf_counter() - start_time:.4f}")
-        # print("Completed depth: ", curDepth)
         print(f"{curDepth}   {len(visited)}     {time.perf_counter() - start_time:.4f}")
-        # print(best_recipes)
-        # print(flush=True)
-        # if curDepth == 10:
-        #     break
+        if curDepth == 9:
+            break
         # Only relevant for local files - if exhausted the outputs, stop
         if len(visited) == prev_visited:
             break
         curDepth += 1
 
-    # with open(all_best_recipes_file, "w", encoding="utf-8") as file:
-    #     for key, value in best_recipes.items():
-    #         # if key not in elements:
-    #         #     continue
-    #         # print(f"{key} has {len(value)} distinct minimal recipes")
-    #         # file.write(f"{key} has {len(value)} distinct recipes that's 1 off from minimal:\n")
-    #         file.write(f"{key}\n")
-    #         # for r in value:
-    #         #     items = list(r.items_set())
-    #         #     items.sort()
-    #         #     file.write("\n{" + ", ".join(items) + "} -> " + str(r) + "\n")
-    #         file.write("\n--\n".join([str(r) for r in value]))
-    #
-    #         file.write("\n-----------------------------------------------\n")
+    if save_all_best_recipes:
+        best_recipes_json = {}
+        for key, value in best_recipes.items():
+            best_recipes_json[key] = [r.to_list() for r in value]
+        with open(all_best_recipes_file, "w", encoding="utf-8") as file:
+            json.dump(best_recipes_json, file, ensure_ascii=False, indent=4)
 
 
 async def main():
@@ -320,5 +298,7 @@ async def main():
 
 
 if __name__ == "__main__":
+    if os.name == 'nt':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())
     # print("\", \"".join(elements.split('\n')))

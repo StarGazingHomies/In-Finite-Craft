@@ -1,3 +1,11 @@
+import json
+import sys
+import time
+import traceback
+import urllib
+from urllib.parse import quote_plus
+from urllib.request import Request, urlopen
+
 import recipe
 
 elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Nitrogen", "Oxygen", "Fluorine", "Neon",
@@ -72,7 +80,7 @@ def static_check_script(filename: str):
 def dynamic_check_script(filename: str):
     global recipe_handler
     if recipe_handler is None:
-        recipe_handler = recipe.RecipeHandler()
+        recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
 
     with open(filename, 'r', encoding='utf-8') as file:
         crafts = file.readlines()
@@ -235,19 +243,19 @@ def combine_element_pairs():
 
 if __name__ == '__main__':
     # combine_element_pairs()
-    # static_check_script('periodic_table_speedrun_v1.4.txt')
-    best_recipes = load_best_recipes('expanded_recipes_depth_10.txt')
-    count = 0
-    for key in best_recipes:
-        for c in key:
-            if c.isalnum():
-                continue
-            if c == ' ':
-                continue
-            print(key)
-            break
-    print(count)
-    # dynamic_check_script('periodic_table_speedrun_v1.4.txt')
-    # add_element('periodic_table_speedrun_v1.4.txt',
-    #                          "Blue",
-    #             load_best_recipes('expanded_recipes_depth_9.txt'))
+    static_check_script('v1.7.12-reduced.txt')
+    # best_recipes = load_best_recipes('expanded_recipes_depth_10.txt')
+    # count = 0
+    # for key in best_recipes:
+    #     for c in key:
+    #         if c.isalnum():
+    #             continue
+    #         if c == ' ':
+    #             continue
+    #         print(key)
+    #         break
+    # print(count)
+    # dynamic_check_script('periodic_table_speedrun_v1.7.4.txt')
+    # add_element('periodic_table_speedrun_v1.6.8.txt',
+    #                          "C",
+    #             load_best_recipes('expanded_recipes_depth_10.txt'))

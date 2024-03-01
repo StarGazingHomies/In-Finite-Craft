@@ -14,7 +14,6 @@ def result_key(a: str, b: str) -> str:
     return a + "\t" + b
 
 
-
 def save(dictionary, file_name):
     try:
         json.dump(dictionary, open(file_name, 'w', encoding='utf-8'), ensure_ascii=False)
@@ -52,6 +51,7 @@ def best_recipes_to_json(recipe_file: str, output_file: str):
                 relevant_recipes[output] = [(u.strip(), v.strip())]
 
     save(relevant_recipes, output_file)
+
 
 def modify_save_file(file: str, items_file: str, new_file: str):
     with open(file, "r", encoding='utf-8') as f:
@@ -286,6 +286,17 @@ def merge_old(file_r: str, file_i: str):
         recipe_handler.add_recipe(u, v, r)
 
 
+def get_results_for(results: list[str]):
+    recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
+    for result in results:
+        print(recipe_handler.get_local_results_for(result))
+
+
+def get_recipes_using(elements: list[str]):
+    recipe_handler = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
+    for element in elements:
+        print(recipe_handler.get_local_results_using(element))
+
 
 @cache
 def limit(n: int) -> int:
@@ -311,7 +322,10 @@ def ordered_total(cur_limit, cur_step, max_steps):
 
 
 if __name__ == '__main__':
-    merge_old("cache/recipes_o.json", "cache/items_o.json")
+    get_results_for(["Obama"])
+    pass
+    # merge_old("cache/recipes_o.json", "cache/items_o.json")
+    # get_recipes_using(["Ab", "AB", "Ac", "AC", "Lord of the Rings", "Lord Of The Rings"])
     # print(ordered_total(0, 0, 9))  # 26248400230
     # print(ordered_total(0, 0, 15))
     # for i in range(15):
