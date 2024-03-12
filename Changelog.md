@@ -10,10 +10,18 @@ i9-13950HX,
 Note that power settings and the like can change between versions, so results
 are not comparable between them.
 
+TODO:
+- Saving current progress, and resuming from the last point to avoid heavy precompute
+- Better configuration (CLI arguments or config file)
+- Use a proper database for recipes and items
+
+Future TODO:
+- Speedrun auto-optimization (minimum spanning hypergraph)
+- 
+
 ## Version 1.3.2
 
 Added some compression by using ids for items.
-
 
 ## Version 1.3.1
 

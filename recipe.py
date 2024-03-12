@@ -11,7 +11,6 @@ from urllib.parse import quote_plus
 import aiohttp
 from bidict import bidict
 
-
 # TODO: Implement a proper db, like Postgresql
 
 
@@ -155,17 +154,26 @@ class RecipeHandler:
 
     def add_recipe(self, a: str, b: str, result: int):
         if self.result_key(a, b) not in self.recipes_cache or \
-                (self.recipes_cache[self.result_key(a, b)] != result and result != -2): # -2 is local_nothing_indication
+                (self.recipes_cache[
+                     self.result_key(a, b)] != result and result != -2):  # -2 is local_nothing_indication
             self.recipes_cache[self.result_key(a, b)] = result
             self.recipes_changes += 1
-            if self.recipes_changes % self.recipe_autosave_interval == 0:
+            if self.recipes_changes >= self.recipe_autosave_interval:
                 print("Autosaving recipes file...")
                 save_json(self.recipes_cache, self.recipes_file)
+                self.recipes_changes = 0
 
     def save_response(self, a: str, b: str, response: dict):
         result = response['result']
-        emoji = response['emoji']
-        new = response['isNew']
+        try:
+            emoji = response['emoji']
+        except KeyError:
+            emoji = ''
+        try:
+            new = response['isNew']
+        except KeyError:
+            new = False
+
         print(f"New Recipe: {a} + {b} -> {result}")
         if new:
             print(f"FIRST DISCOVERY: {a} + {b} -> {result}")
@@ -174,7 +182,7 @@ class RecipeHandler:
         result_id = self.add_item(result, emoji, new)
 
         # Save as the fake nothing if it's the first run
-        if result == "Nothing" and result not in self.recipes_cache and not self.trust_first_run_nothing:
+        if result == "Nothing" and self.result_key(a, b) not in self.recipes_cache and not self.trust_first_run_nothing:
             result = self.local_nothing_indication
             result_id = self.items_id[result]
 
@@ -227,6 +235,20 @@ class RecipeHandler:
         local_result = self.get_local(a, b)
         # print(f"Local result: {a} + {b} -> {local_result}")
         if local_result and local_result != self.local_nothing_indication:
+
+            # TODO: Censoring - temporary, to see how much of a change it has
+            # print(local_result)
+            if ("slave" in local_result.lower() or
+                    "terroris" in local_result.lower() or
+                    "hamas" in local_result.lower() or
+                    local_result.lower() == 'jew' or
+                    local_result.lower() == "rape" or
+                    local_result.lower() == "rapist" or
+                    local_result.lower() == "pedophile" or
+                    local_result.lower() == "aids" or
+                    "Bin Laden" in local_result):
+                return "Nothing"
+
             return local_result
 
         if self.local_only:
@@ -237,8 +259,8 @@ class RecipeHandler:
 
         nothing_count = 1
         while (local_result != self.local_nothing_indication and  # "Nothing" in local cache is long, long ago
-               r['result'] == "Nothing" and                       # Still getting "Nothing" from the API
-               nothing_count < self.nothing_verification):        # We haven't verified "Nothing" enough times
+               r['result'] == "Nothing" and  # Still getting "Nothing" from the API
+               nothing_count < self.nothing_verification):  # We haven't verified "Nothing" enough times
             # Request again to verify, just in case...
             # Increases time taken on requests but should be worth it.
             # Also note that this can't be asynchronous due to all the optimizations I made assuming a search order
@@ -269,7 +291,7 @@ class RecipeHandler:
             try:
                 # print(url, type(url))
                 async with session.get(url) as resp:
-                    print(resp.status)
+                    # print(resp.status)
                     if resp.status == 200:
                         self.sleep_time = self.sleep_default
                         return await resp.json()

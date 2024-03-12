@@ -312,8 +312,8 @@ def ordered_total(cur_limit, cur_step, max_steps):
         return 1
     if cur_limit >= limit(cur_step + init_list_size):
         return 0
-    if cur_step == max_steps - 1 and cur_step != 0:
-        return limit(cur_step + init_list_size + 1) - limit(cur_step + init_list_size)
+    # if cur_step == max_steps - 1 and cur_step != 0:
+    #     return limit(cur_step + init_list_size + 1) - limit(cur_step + init_list_size)
 
     # print(f"Step {cur_step} with limit {cur_limit} has {s} recipes")
     return \
@@ -321,9 +321,126 @@ def ordered_total(cur_limit, cur_step, max_steps):
             ordered_total(cur_limit + 1, cur_step, max_steps)
 
 
+def get_items(file: str):
+    with open(file, "r", encoding="utf-8") as f:
+        items = json.load(f)
+    return items
+
+
+def alpha_3_tmp(file: str, new_file: str):
+
+    exists = set()
+    for i in range(26):
+        first_letter = chr(ord('A') + i)
+        with open("3 letter spreadsheet/" + first_letter + ".csv", "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        for line in lines:
+            values = line.split(",")
+            for i in range(0, len(values), 2):
+                if values[i+1].strip() != "Yes":
+                    continue
+
+                exists.add(values[i].strip().lower())
+
+    with open(file, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    new_result = []
+    include_next_line = False
+    count = 0
+
+    current_result = []
+    for line in lines:
+        if include_next_line:
+            current_result[1] += line
+            # new_result.append(line)
+            include_next_line = False
+            new_result.append(current_result)
+
+        if line.count(":") == 2 and line.split(":")[1].strip().lower() not in exists:
+            result = line.split(":")[1].strip()
+            current_result = [result, ""]
+            current_result[1] += f"{result}: "
+            include_next_line = True
+            count += 1
+
+    new_result.sort()
+
+    with open(new_file, "w", encoding="utf-8") as f:
+        f.write("\n".join([x[1] for x in new_result]))
+
+
+def convert_to_savefile(savefile: str, items_file: str, recipes_file: str):
+    with open(items_file, "r", encoding="utf-8") as f:
+        items = json.load(f)
+    with open(recipes_file, "r", encoding="utf-8") as f:
+        recipes = json.load(f)
+
+    items_reverse = {v[1]: [v[0], k, v[2]] for k, v in items.items()}
+
+    new_data = {"elements": [], "recipes": {}, "darkMode": True}
+    for key, value in items.items():
+        new_data["elements"].append({
+            "text": key,
+            "emoji": value[0],
+            "discovered": value[1]
+        })
+
+    i = 0
+    for key, value in recipes.items():
+        i += 1
+        if i % 100000 == 0:
+            print(f"Processed {i} of {len(recipes)} recipes")
+        if value < 0:
+            continue
+        key = int(key)
+        value = int(value)
+        u, v = recipe.int_to_pair(key)
+        u_item = items_reverse[u]
+        v_item = items_reverse[v]
+        result = items_reverse[value][1]
+
+        u_formatted = {
+            "text": u_item[1],
+            "emoji": u_item[0]
+        }
+        v_formatted = {
+            "text": v_item[1],
+            "emoji": v_item[0]
+        }
+
+        craft_formatted = [u_formatted, v_formatted]
+
+        if result in new_data["recipes"]:
+            new_data["recipes"][result].append(craft_formatted)
+        else:
+            new_data["recipes"][result] = [craft_formatted]
+
+    with open(savefile, "w", encoding="utf-8") as f:
+        json.dump(new_data, f, ensure_ascii=False)
+
+
 if __name__ == '__main__':
-    get_results_for(["Obama"])
-    pass
+    convert_to_savefile("infinitecraft.json", "cache/items.json", "cache/recipes.json")
+    # get_results_for(["Obama"])
+    # print(ordered_total(0, 0, 2))
+    # alpha_3_tmp("best_recipes.txt", "three_letters.txt")
+    # i = get_items("cache/items.json")
+    # three_letter = set()
+    # counter = 0
+    # discoveries = 0
+    # first_discoveries = 0
+    # for key, value in i.items():
+    #     discoveries += 1
+    #     if value[2]:
+    #         first_discoveries += 1
+        # if key.isalnum() and len(key) == 3 and key.lower() not in three_letter:
+        #     three_letter.add(key.lower())
+        #     if value[2]:
+        #         print(key, value)
+        #         counter += 1
+    # print(discoveries, first_discoveries)
+    # pass
     # merge_old("cache/recipes_o.json", "cache/items_o.json")
     # get_recipes_using(["Ab", "AB", "Ac", "AC", "Lord of the Rings", "Lord Of The Rings"])
     # print(ordered_total(0, 0, 9))  # 26248400230

@@ -15,7 +15,6 @@ import recipe
 
 init_state: tuple[str, ...] = ("Water", "Fire", "Wind", "Earth")
 
-
 # For people who want to start with a lot more things
 elements = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Nitrogen", "Oxygen", "Fluorine", "Neon",
             "Sodium", "Magnesium", "Aluminium", "Silicon", "Phosphorus", "Sulfur", "Chlorine", "Argon", "Potassium",
@@ -36,6 +35,8 @@ letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
            "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
            "U", "V", "W", "X", "Y", "Z"]
 
+rearrange_words = ["Anagram", "Reverse", "Opposite", "Scramble", "Rearrange", "Palindrome", "Not"]
+
 # If capitalization matters...
 # letters2 = ["AA", "Ab", "Ac", "Ad", "AE", "AF", "Ag", "AH", "Ai", "Aj", "AK", "Al", "Am", "An", "AO", "AP", "AQ", "Ar", "As", "At", "Au", "Av", "AW", "Ax", "AY", "Az",
 #             "BA", "Bb", "BC", "BD", "Be", "BF", "BG", "BH", "Bi", "BJ", "BK", "BL", "BM", "Bn", "BO", "BP", "BQ", "BR", "BS", "BT", "BU", "BV", "BW", "Bx", "BY", "Bz"]
@@ -47,17 +48,22 @@ for l1 in letters:
         letters2.append(l1 + l2)
 
 # init_state = tuple(list(init_state) + elements + ["Periodic Table",])
-# init_state = tuple(list(init_state) + letters + letters2)
+init_state = tuple(list(init_state) + letters + letters2)
 recipe_handler = recipe.RecipeHandler(init_state)
+depth_limit = 1
 
 best_recipes: dict[str, list['GameState']] = dict()
 visited = set()
 best_depths: dict[str, int] = dict()
 best_recipes_file: str = "best_recipes.txt"
-all_best_recipes_file: str = "all_best_recipes.json"
+all_best_recipes_file: str = "all_best_recipes_depth_10_filtered.json"
 extra_depth = 0
 save_all_best_recipes: bool = False
-respect_case: bool = True
+case_sensitive: bool = False
+write_to_file: bool = True
+three_letter_search: bool = True
+allow_starting_elements: bool = False
+
 
 @cache
 def int_to_pair(n: int) -> tuple[int, int]:
@@ -135,9 +141,10 @@ class GameState:
         # Invalid crafts, items we already have, or items that can be crafted earlier are ignored.
         if (craft_result is None or
                 craft_result == "Nothing" or
-                craft_result in self.items or  # TODO: Temporary ignore for elements search
-                # craft_result == self.items[u] or craft_result == self.items[v] or
-                # (craft_result in self.items and self.used[self.items.index(craft_result)] != 0) or
+                (not allow_starting_elements and craft_result in self.items) or
+                (allow_starting_elements and
+                    (craft_result == self.items[u] or craft_result == self.items[v] or
+                    (craft_result in self.items and self.used[self.items.index(craft_result)] != 0))) or
                 # Even though we are looking for results in the original list, we still
                 # Don't want to use the result itself in any craft
                 craft_result in self.children):
@@ -169,20 +176,18 @@ class GameState:
 
 
 def process_node(state: GameState):
-    # TODO: Only enable for 3-letter search
-    # if len(state.tail_item()) != 3 or not state.tail_item().isalpha():
-    #     return
+    if three_letter_search:
+        if len(state.tail_item()) != 3 or not state.tail_item().isalpha():
+            return
 
-    if respect_case:
-        if state.tail_item() not in visited:
-            visited.add(state.tail_item())
-            #  Dumb writing to file
-            with open(best_recipes_file, "a", encoding="utf-8") as file:
-                file.write(str(len(visited)) + ": " + str(state) + "\n\n")
-    else:
-        if state.tail_item().upper() not in visited:
-            visited.add(state.tail_item().upper())
-            #  Dumb writing to file
+    tail_item = state.tail_item()
+    if not case_sensitive:
+        tail_item = tail_item.upper()
+
+    if tail_item not in visited:
+        visited.add(tail_item)
+        #  Dumb writing to file
+        if write_to_file:
             with open(best_recipes_file, "a", encoding="utf-8") as file:
                 file.write(str(len(visited)) + ": " + str(state) + "\n\n")
 
@@ -191,7 +196,7 @@ def process_node(state: GameState):
         depth = len(state) - len(init_state)
         if state.tail_item() not in best_depths:
             best_depths[state.tail_item()] = depth
-            best_recipes[state.tail_item()] = [state,]
+            best_recipes[state.tail_item()] = [state, ]
         elif depth <= best_depths[state.tail_item()] + extra_depth:
             best_recipes[state.tail_item()].append(state)
 
@@ -213,9 +218,9 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
     if len(state.tail_item()) > recipe.WORD_COMBINE_CHAR_LIMIT:
         return 0
 
-    # TODO: Extra step until filtering, for elements search
-    # if state.tail_item() in state.items[:-1]:
-    #     return 0
+    # Even if we allowed starting element results, we're still not going to continue from such a state
+    if allow_starting_elements and state.tail_item() in state.items[:-1]:
+        return 0
 
     count = 0  # States counter
     unused_items = state.unused_items()  # Unused items
@@ -228,7 +233,6 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
                 if child is not None:
                     count += await dls(session, child, depth - 1)
         return count
-    # TODO: elif len(unused_items) == depth might be a useful pruning case. Not gonna bother right now.
     else:
         lower_limit = 0
         if depth == 1 and state.tail_index() != -1:  # Must use the 2nd last element, if it's not a default item.
@@ -262,7 +266,7 @@ async def iterative_deepening_dfs(session: aiohttp.ClientSession):
             curDepth))
 
         print(f"{curDepth}   {len(visited)}     {time.perf_counter() - start_time:.4f}")
-        if curDepth == 9:
+        if curDepth >= depth_limit and depth_limit > 0:
             break
         # Only relevant for local files - if exhausted the outputs, stop
         if len(visited) == prev_visited:

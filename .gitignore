@@ -5,6 +5,7 @@ recipes.txt
 # Other stuff
 .idea/*
 pycache/*
+misc/*
 *.pyc
 *.txt
 *.json
