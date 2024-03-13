@@ -48,7 +48,7 @@ for l1 in letters:
         letters2.append(l1 + l2)
 
 # init_state = tuple(list(init_state) + elements + ["Periodic Table",])
-init_state = tuple(list(init_state) + letters + letters2)
+# init_state = tuple(list(init_state) + letters + letters2)
 recipe_handler = recipe.RecipeHandler(init_state)
 depth_limit = 1
 
@@ -59,9 +59,9 @@ best_recipes_file: str = "best_recipes.txt"
 all_best_recipes_file: str = "all_best_recipes_depth_10_filtered.json"
 extra_depth = 0
 save_all_best_recipes: bool = False
-case_sensitive: bool = False
+case_sensitive: bool = True
 write_to_file: bool = True
-three_letter_search: bool = True
+three_letter_search: bool = False
 allow_starting_elements: bool = False
 
 

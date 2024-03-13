@@ -10,6 +10,7 @@ from urllib.parse import quote_plus
 
 import aiohttp
 from bidict import bidict
+import sqlite3
 
 # TODO: Implement a proper db, like Postgresql
 
@@ -29,57 +30,32 @@ def int_to_pair(n: int) -> tuple[int, int]:
     i = n - (j * (j + 1)) // 2
     return i, j
 
+# Insert a recipe into the database
+insert_recipe = ("""
+    INSERT INTO recipes (ingredient1_id, ingredient2_id, result_id)
+    SELECT ing1.id, ing2.id, result.id
+    FROM items   AS result
+    JOIN items   AS ing1   ON ing1.name = ?
+    JOIN items   AS ing2   ON ing2.name = ?
+    WHERE result.name = ?
+    ON CONFLICT (ingredient1_id, ingredient2_id) DO UPDATE SET
+    result_id = EXCLUDED.result_id
+    """)
 
-def load_json(file_name):
-    try:
-        with open(file_name, 'r', encoding='utf-8') as fin:
-            return json.load(fin)
-    except FileNotFoundError:
-        return {}
-
-
-def save_json(dictionary, file_name):
-    try:
-        json.dump(dictionary, open(file_name, 'w', encoding='utf-8'), ensure_ascii=False)
-    except FileNotFoundError:
-        print(f"Could not write to {file_name}! Trying to create cache folder...", flush=True)
-        try:
-            os.mkdir("cache")  # TODO: generalize
-            json.dump(dictionary, open(file_name, 'w', encoding='utf-8'), ensure_ascii=False)
-        except Exception as e:
-            print(f"Could not create folder or write to file: {e}", flush=True)
-            print(dictionary)
-    except Exception as e:
-        print(f"Unrecognized Error: {e}", flush=True)
-        print(dictionary)
-
-
-def save_nothing(a: str, b: str, response: dict):
-    file_name = f"cache/nothing/{a}+{b}.json"
-    try:
-        with open(file_name, 'w') as file:
-            json.dump(response, file)
-    except FileNotFoundError:
-        try:
-            os.mkdir("cache/nothing")
-            with open(file_name, 'w') as file:
-                json.dump(response, file)
-        except Exception as e:
-            print(f"Could not create folder or write to file: {e}", flush=True)
-            print(response)
+# Query for a recipe
+query_recipe = ("""
+    SELECT result.name, result.emoji
+    FROM recipes
+    JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id
+    JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id
+    JOIN items   AS result ON result.id = recipes.result_id
+    WHERE ing1.name = ? AND ing2.name = ?
+    """)
 
 
 class RecipeHandler:
-    recipes_cache: dict[str, int]
-    items_cache: dict[str, tuple[str, int, bool]]
-    items_id: bidict[str, int]
-    recipes_changes: int = 0
-    recipe_autosave_interval: int = 3000
-    items_changes: int = 0
-    items_autosave_interval: int = 100
-    item_count: int = 0
-    recipes_file: str = "cache/recipes.json"
-    items_file: str = "cache/items.json"
+    db: sqlite3.Connection
+    db_location: str = "cache/recipes.db"
 
     last_request: float = 0
     request_cooldown: float = 0.5  # 0.5s is safe for this API
@@ -95,73 +71,82 @@ class RecipeHandler:
     connection_timeout: float = 5.0  # Connection timeout
 
     def __init__(self, init_state):
-        self.recipes_cache = load_json(self.recipes_file)
-        self.items_cache = load_json(self.items_file)
-        self.items_id = bidict()
+        self.db = sqlite3.connect(self.db_location)
+        atexit.register(lambda: (self.db.commit(), self.db.close()))
+        # Items table
+        self.db.execute("""
+            CREATE TABLE IF NOT EXISTS items (
+                id INTEGER PRIMARY KEY,
+                emoji text,
+                name text UNIQUE,
+                first_discovery boolean)
+            """)
+        self.db.execute("""
+            CREATE INDEX IF NOT EXISTS items_name_index ON items (name);
+        """)
 
-        max_id = max(self.items_cache.values(), key=lambda x: x[1])[1] if self.items_cache else 0
-        self.item_count = max_id + 1
+        # Recipes table
+        self.db.execute("""
+            CREATE TABLE IF NOT EXISTS recipes (
+                ingredient1_id integer REFERENCES items(id),
+                ingredient2_id integer REFERENCES items(id),
+                result_id integer REFERENCES items(id),
+                PRIMARY KEY (ingredient1_id, ingredient2_id) )
+            """)
+        # For reverse searches only, so not useful for me. May be useful for other people though.
+        # cur.execute("""
+        #     CREATE INDEX IF NOT EXISTS recipes_result_index ON recipes (result_id)
+        # """)
 
-        for item, (emoji, elem_id, _) in self.items_cache.items():
-            self.items_id[item] = elem_id
+        # Add starting items
+        for item in init_state:
+            self.add_starting_item(item, "", False)
 
-        for elem in init_state:
-            self.add_item(elem, '', False)
+        # # Nothing is -1, local_nothing_indication is -2
+        self.add_item_force_id("Nothing", '', False, -1)
+        self.add_item_force_id(self.local_nothing_indication, '', False, -2)
+        #
+        # # Get rid of "nothing"s, if we don't trust "nothing"s.
+        # if not self.trust_cache_nothing:
+        #     temp_set = frozenset(self.recipes_cache.items())
+        #     for ingredients, result in temp_set:
+        #         if result < 0:
+        #             self.recipes_cache[ingredients] = -2
+        #     save_json(self.recipes_cache, self.recipes_file)
 
-        # Nothing is -1, local_nothing_indication is -2
-        if "Nothing" not in self.items_cache:
-            self.add_item("Nothing", '', False, -1)
-        if self.local_nothing_indication not in self.items_cache:
-            self.add_item(self.local_nothing_indication, '', False, -2)
+    def add_item(self, item: str, emoji: str, first_discovery: bool = False):
+        print(f"Adding: {item} ({emoji})")
+        cur = self.db.cursor()
+        cur.execute("INSERT INTO items (emoji, name, first_discovery) VALUES (?, ?, ?) "
+                    "ON CONFLICT (name) DO UPDATE SET "
+                    "emoji = EXCLUDED.emoji, "
+                    "first_discovery = items.first_discovery OR EXCLUDED.first_discovery",
+                    (emoji, item, first_discovery))
 
-        # Get rid of "nothing"s, if we don't trust "nothing"s.
-        if not self.trust_cache_nothing:
-            temp_set = frozenset(self.recipes_cache.items())
-            for ingredients, result in temp_set:
-                if result < 0:
-                    self.recipes_cache[ingredients] = -2
-            save_json(self.recipes_cache, self.recipes_file)
+    def add_starting_item(self, item: str, emoji: str, first_discovery: bool = False):
+        print(f"Adding: {item} ({emoji})")
+        cur = self.db.cursor()
+        cur.execute("INSERT INTO items (emoji, name, first_discovery) VALUES (?, ?, ?) "
+                    "ON CONFLICT (name) DO NOTHING",
+                    (emoji, item, first_discovery))
 
-        # If we're not adding anything, we don't need to save
-        if not self.local_only:
-            atexit.register(lambda: save_json(self.recipes_cache, self.recipes_file))
-            atexit.register(lambda: save_json(self.items_cache, self.items_file))
+    def add_item_force_id(self, item: str, emoji: str, first_discovery: bool = False, overwrite_id: int = None):
+        cur = self.db.cursor()
+        try:
+            cur.execute("INSERT INTO items (id, emoji, name, first_discovery) VALUES (?, ?, ?, ?)"
+                        "ON CONFLICT (id) DO NOTHING",
+                        (overwrite_id, emoji, item, first_discovery))
+            self.db.commit()
+        except Exception as e:
+            print(e)
 
-    def result_key(self, param1: str, param2: str) -> str:
-        id1 = self.items_id[param1]
-        id2 = self.items_id[param2]
-        return str(pair_to_int(id1, id2))
+    def add_recipe(self, a: str, b: str, result: str):
+        if a > b:
+            a, b = b, a
 
-    def add_item(self, item: str, emoji: str, first_discovery: bool = False, force_id: Optional[int] = None) -> int:
-        if item not in self.items_cache:
-            new_id = force_id if force_id is not None else self.item_count
-            self.items_cache[item] = (emoji, new_id, first_discovery)
-            self.items_id[item] = new_id
-            self.items_changes += 1
-            if not force_id:
-                self.item_count += 1
-        # Add missing emoji
-        elif self.items_cache[item][0] == '' and emoji != '':
-            print(f"Adding missing emoji {emoji} to {item}")
-            self.items_cache[item] = (emoji, self.items_cache[item][1], self.items_cache[item][2])
-            self.items_changes += 1
-
-        if self.items_changes == self.items_autosave_interval:
-            print("Autosaving items file...")
-            save_json(self.items_cache, self.items_file)
-            self.items_changes = 0
-        return self.items_cache[item][1]
-
-    def add_recipe(self, a: str, b: str, result: int):
-        if self.result_key(a, b) not in self.recipes_cache or \
-                (self.recipes_cache[
-                     self.result_key(a, b)] != result and result != -2):  # -2 is local_nothing_indication
-            self.recipes_cache[self.result_key(a, b)] = result
-            self.recipes_changes += 1
-            if self.recipes_changes >= self.recipe_autosave_interval:
-                print("Autosaving recipes file...")
-                save_json(self.recipes_cache, self.recipes_file)
-                self.recipes_changes = 0
+        print(f"Adding: {a} + {b} -> {result}")
+        cur = self.db.cursor()
+        cur.execute(insert_recipe, (a, b, result))
 
     def save_response(self, a: str, b: str, response: dict):
         result = response['result']
@@ -179,55 +164,50 @@ class RecipeHandler:
             print(f"FIRST DISCOVERY: {a} + {b} -> {result}")
 
         # Items - emoji, new discovery
-        result_id = self.add_item(result, emoji, new)
+        self.add_item(result, emoji, new)
 
         # Save as the fake nothing if it's the first run
-        if result == "Nothing" and self.result_key(a, b) not in self.recipes_cache and not self.trust_first_run_nothing:
-            result = self.local_nothing_indication
-            result_id = self.items_id[result]
+        # if result == "Nothing" and self.result_key(a, b) not in self.recipes_cache and not self.trust_first_run_nothing:
+        #     result = self.local_nothing_indication
+        #     result_id = self.items_id[result]
 
         # Recipe: A + B --> C
-        self.add_recipe(a, b, result_id)
+        self.add_recipe(a, b, result)
 
     def get_local(self, a: str, b: str) -> Optional[str]:
-        if self.result_key(a, b) not in self.recipes_cache:
+        if a > b:
+            a, b = b, a
+        cur = self.db.cursor()
+        cur.execute(query_recipe, (a, b))
+        result = cur.fetchone()
+        if result:
+            return result[0]
+        else:
             return None
-        result = self.recipes_cache[self.result_key(a, b)]
-        if result not in self.items_id.inverse:
-            return None
 
-        result_str = self.items_id.inverse[result]
+    # def get_local_results_for(self, r: str) -> list[tuple[str, str]]:
+    #     if r not in self.items_cache:
+    #         return []
+    #
+    #     result_id = self.items_id[r]
+    #     recipes = []
+    #     for ingredients, result in self.recipes_cache.items():
+    #         if result == result_id:
+    #             a, b = int_to_pair(int(ingredients))
+    #             recipes.append((self.items_id.inverse[a], self.items_id.inverse[b]))
+    #     return recipes
 
-        # Didn't get the emoji. Useful for upgrading from a previous version.
-        if result >= 0 and self.items_cache[result_str][0] == '':
-            # print(f"Missing {result} in cache!")
-            # print(f"{result}!!")
-            return None
-        return result_str
-
-    def get_local_results_for(self, r: str) -> list[tuple[str, str]]:
-        if r not in self.items_cache:
-            return []
-
-        result_id = self.items_id[r]
-        recipes = []
-        for ingredients, result in self.recipes_cache.items():
-            if result == result_id:
-                a, b = int_to_pair(int(ingredients))
-                recipes.append((self.items_id.inverse[a], self.items_id.inverse[b]))
-        return recipes
-
-    def get_local_results_using(self, a: str) -> list[tuple[str, str, str]]:
-        if a not in self.items_cache:
-            return []
-
-        recipes = []
-        for other in self.items_cache:
-            result = self.recipes_cache.get(self.result_key(a, other))
-            if not result:
-                continue
-            recipes.append((a, other, self.items_id.inverse[result]))
-        return recipes
+    # def get_local_results_using(self, a: str) -> list[tuple[str, str, str]]:
+    #     if a not in self.items_cache:
+    #         return []
+    #
+    #     recipes = []
+    #     for other in self.items_cache:
+    #         result = self.recipes_cache.get(self.result_key(a, other))
+    #         if not result:
+    #             continue
+    #         recipes.append((a, other, self.items_id.inverse[result]))
+    #     return recipes
 
     # Adapted from analog_hors on Discord
     async def combine(self, session: aiohttp.ClientSession, a: str, b: str) -> str:
@@ -235,19 +215,18 @@ class RecipeHandler:
         local_result = self.get_local(a, b)
         # print(f"Local result: {a} + {b} -> {local_result}")
         if local_result and local_result != self.local_nothing_indication:
-
             # TODO: Censoring - temporary, to see how much of a change it has
             # print(local_result)
-            if ("slave" in local_result.lower() or
-                    "terroris" in local_result.lower() or
-                    "hamas" in local_result.lower() or
-                    local_result.lower() == 'jew' or
-                    local_result.lower() == "rape" or
-                    local_result.lower() == "rapist" or
-                    local_result.lower() == "pedophile" or
-                    local_result.lower() == "aids" or
-                    "Bin Laden" in local_result):
-                return "Nothing"
+            # if ("slave" in local_result.lower() or
+            #         "terroris" in local_result.lower() or
+            #         "hamas" in local_result.lower() or
+            #         local_result.lower() == 'jew' or
+            #         local_result.lower() == "rape" or
+            #         local_result.lower() == "rapist" or
+            #         local_result.lower() == "pedophile" or
+            #         local_result.lower() == "aids" or
+            #         "Bin Laden" in local_result):
+            #     return "Nothing"
 
             return local_result
 
