@@ -436,12 +436,9 @@ def add_to_recipe_handler(items_file: str, recipes_file: str):
         rh.add_item(key, value[0], value[2])
 
     i = 0
-    recipes_to_add = []
     for key, value in recipes.items():
         i += 1
         if i % 100000 == 0:
-            rh.mass_add_recipe(recipes_to_add)
-            recipes_to_add = []
             print(f"Processed {i} of {len(recipes)} recipes")
         # if value < 0:
         #     continue
@@ -453,13 +450,35 @@ def add_to_recipe_handler(items_file: str, recipes_file: str):
         result = items_reverse[value][1]
         if u_item > v_item:
             u_item, v_item = v_item, u_item  # Swap to ensure u < v
-        recipes_to_add.append((u_item, v_item, result))
+        rh.add_recipe(u_item, v_item, result)
 
-    rh.mass_add_recipe(recipes_to_add)
+
+def generate_single_best_recipe(output_file: str):
+    try:
+        with open("persistent.json", "r", encoding="utf-8") as file:
+            last_state_json = json.load(file)
+        best_recipes = last_state_json["BestRecipes"]
+    except FileNotFoundError:
+        best_recipes = {}
+
+    MAX_DEPTH = 10
+    recipe_list = [[] for _ in range(MAX_DEPTH + 1)]
+    for key, value in best_recipes.items():
+        recipe_list[len(value[0])].append((key, value[0]))
+
+    print("Recipes at each depth: ", [len(x) for x in recipe_list])
+    print("Total recipes at each depth: ", [sum([len(x) for x in recipe_list[:i + 1]]) for i in range(1, len(recipe_list))])
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        for i in range(MAX_DEPTH + 1):
+            for key, value in recipe_list[i]:
+                value_str = "\n".join([f"{x[0]} + {x[1]} -> {x[2]}" for x in value])
+                f.write(f"{key}:\n{value_str}\n\n")
 
 
 if __name__ == '__main__':
-    add_to_recipe_handler("cache/items.json", "cache/recipes.json")
+    generate_single_best_recipe("best_recipes.txt")
+    # add_to_recipe_handler("cache/items.json", "cache/recipes.json")
     # convert_to_savefile("infinitecraft.json", "cache/items.json", "cache/recipes.json")
     # get_results_for(["Obama"])
     # print(ordered_total(0, 0, 2))

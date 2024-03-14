@@ -1,5 +1,6 @@
 import atexit
 import os
+import sys
 import time
 from functools import cache
 from typing import Optional
@@ -51,7 +52,7 @@ for l1 in letters:
 # init_state = tuple(list(init_state) + elements + ["Periodic Table",])
 # init_state = tuple(list(init_state) + letters + letters2)
 recipe_handler = recipe.RecipeHandler(init_state)
-depth_limit = 8
+depth_limit = 11
 
 best_recipes: dict[str, list[list[tuple[str, str, str]]]] = dict()
 visited = set()
@@ -64,6 +65,8 @@ allow_starting_elements: bool = False
 resume_last_run: bool = True
 last_game_state: Optional['GameState'] = None
 new_last_game_state: Optional['GameState'] = None
+autosave_interval = 500     # Save every 500 new visited elements
+autosave_counter = 0
 
 
 @cache
@@ -187,6 +190,8 @@ class GameState:
 
 
 def process_node(state: GameState):
+    global autosave_counter
+
     if three_letter_search:
         if len(state.tail_item()) != 3 or not state.tail_item().isalpha():
             return
@@ -197,6 +202,13 @@ def process_node(state: GameState):
 
     if tail_item not in visited:
         visited.add(tail_item)
+        autosave_counter += 1
+        if autosave_counter >= autosave_interval:
+            autosave_counter = 0
+            save_last_state()
+        # Still write to best_recipes.txt file
+        # with open(best_recipes_file, "a", encoding="utf-8") as file:
+        #     file.write(f"{len(visited)}: {state}\n\n")
 
     # Multiple recipes for the same item at same depth
     depth = len(state) - len(init_state)
@@ -261,7 +273,8 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
 
 async def iterative_deepening_dfs(session: aiohttp.ClientSession):
     # Clear best recipes file
-    open(best_recipes_file, "w").close()
+    if not resume_last_run:
+        open(best_recipes_file, "w").close()
 
     curDepth = 1
     start_time = time.perf_counter()
@@ -299,14 +312,14 @@ async def main():
     }
     async with aiohttp.ClientSession(headers=headers) as session:
         async with session.get("https://neal.fun/infinite-craft/") as resp:
-            print("Status:", resp.status)
-            print("Content-type:", resp.headers['content-type'])
+            # print("Status:", resp.status)
+            # print("Content-type:", resp.headers['content-type'])
 
             html = await resp.text()
-            print("Body:", html[:15], "...")
-            cookies = session.cookie_jar.filter_cookies('https://neal.fun/infinite-craft/')
-            for key, cookie in cookies.items():
-                print('Key: "%s", Value: "%s"' % (cookie.key, cookie.value))
+            # print("Body:", html[:15], "...")
+            # cookies = session.cookie_jar.filter_cookies('https://neal.fun/infinite-craft/')
+            # for key, cookie in cookies.items():
+            #     print('Key: "%s", Value: "%s"' % (cookie.key, cookie.value))
 
         await iterative_deepening_dfs(session)
 
@@ -336,6 +349,7 @@ if resume_last_run:
 
 @atexit.register
 def save_last_state():
+    print("Autosaving progress...")
     if new_last_game_state is None:
         return
     last_state_json = {
@@ -344,12 +358,12 @@ def save_last_state():
         "BestDepths": best_depths,
         "BestRecipes": best_recipes
     }
-    with open("persistent.json", "w", encoding="utf-8") as file:
+    with open("persistent2.json", "w", encoding="utf-8") as file:
         json.dump(last_state_json, file, ensure_ascii=False, indent=4)
+    os.replace("persistent2.json", "persistent.json")
 
 
 if __name__ == "__main__":
     if os.name == 'nt':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())
-    # print("\", \"".join(elements.split('\n')))

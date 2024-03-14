@@ -21,7 +21,18 @@ Future TODO:
 ## Version 1.4
 
 Implemented SQLite because the db size is growing and memory is no longer sufficient.
-This gives a ~10x performance hit, so I will also have to implement resuming.
+This gives a ~10x performance hit. However, memory footprint of the database itself
+is reduced massively. If memory ever becomes an issue again, the visited set and
+the optimal recipes (and alternatives) will also need to be shoved into a database.
+(Likely no need until depth like, 14-15?)
+
+Also implemented resuming, which saves important runtime data to `persistent.json`
+and will automatically load this json to resume from the last point.
+
+There is also now a weird bug where the program will not terminate from Ctrl+C, which
+makes all of the `atexit.register()` stuff quite useless. Need to find out why
+this is happening, but for now, implemented a temporary save for the persistent file.
+(Database is automagically saved due to sqlite3.)
 
 ## Version 1.3.2
 

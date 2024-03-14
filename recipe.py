@@ -12,8 +12,6 @@ import aiohttp
 from bidict import bidict
 import sqlite3
 
-# TODO: Implement a proper db, like Postgresql
-
 
 WORD_TOKEN_LIMIT = 20
 WORD_COMBINE_CHAR_LIMIT = 30
@@ -29,6 +27,7 @@ def int_to_pair(n: int) -> tuple[int, int]:
     j = math.floor(((8 * n + 1) ** 0.5 - 1) / 2)
     i = n - (j * (j + 1)) // 2
     return i, j
+
 
 # Insert a recipe into the database
 insert_recipe = ("""
@@ -115,7 +114,7 @@ class RecipeHandler:
         #     save_json(self.recipes_cache, self.recipes_file)
 
     def add_item(self, item: str, emoji: str, first_discovery: bool = False):
-        print(f"Adding: {item} ({emoji})")
+        # print(f"Adding: {item} ({emoji})")
         cur = self.db.cursor()
         cur.execute("INSERT INTO items (emoji, name, first_discovery) VALUES (?, ?, ?) "
                     "ON CONFLICT (name) DO UPDATE SET "
@@ -124,7 +123,7 @@ class RecipeHandler:
                     (emoji, item, first_discovery))
 
     def add_starting_item(self, item: str, emoji: str, first_discovery: bool = False):
-        print(f"Adding: {item} ({emoji})")
+        # print(f"Adding: {item} ({emoji})")
         cur = self.db.cursor()
         cur.execute("INSERT INTO items (emoji, name, first_discovery) VALUES (?, ?, ?) "
                     "ON CONFLICT (name) DO NOTHING",
@@ -144,7 +143,7 @@ class RecipeHandler:
         if a > b:
             a, b = b, a
 
-        print(f"Adding: {a} + {b} -> {result}")
+        # print(f"Adding: {a} + {b} -> {result}")
         cur = self.db.cursor()
         cur.execute(insert_recipe, (a, b, result))
 
