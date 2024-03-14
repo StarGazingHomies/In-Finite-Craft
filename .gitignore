@@ -10,5 +10,8 @@ misc/*
 *.txt
 *.json
 
+# Spreadsheet wee
+3 letter spreadsheet/*
+
 # Unignore requirements
 !requirements.txt
