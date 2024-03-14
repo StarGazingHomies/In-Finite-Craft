@@ -1,3 +1,4 @@
+import atexit
 import os
 import time
 from functools import cache
@@ -50,19 +51,19 @@ for l1 in letters:
 # init_state = tuple(list(init_state) + elements + ["Periodic Table",])
 # init_state = tuple(list(init_state) + letters + letters2)
 recipe_handler = recipe.RecipeHandler(init_state)
-depth_limit = 1
+depth_limit = 8
 
-best_recipes: dict[str, list['GameState']] = dict()
+best_recipes: dict[str, list[list[tuple[str, str, str]]]] = dict()
 visited = set()
 best_depths: dict[str, int] = dict()
 best_recipes_file: str = "best_recipes.txt"
 all_best_recipes_file: str = "all_best_recipes_depth_10_filtered.json"
-extra_depth = 0
-save_all_best_recipes: bool = False
 case_sensitive: bool = True
-write_to_file: bool = True
 three_letter_search: bool = False
 allow_starting_elements: bool = False
+resume_last_run: bool = True
+last_game_state: Optional['GameState'] = None
+new_last_game_state: Optional['GameState'] = None
 
 
 @cache
@@ -90,9 +91,9 @@ def limit(n: int) -> int:
 
 
 class GameState:
-    items: list[str, ...]
-    state: list[int, ...]
-    visited: list[set[str], ...]
+    items: list[str]
+    state: list[int]
+    visited: list[set[str]]
     used: list[int]
     children: set[str]
 
@@ -116,6 +117,16 @@ class GameState:
 
     def __eq__(self, other):
         return self.state == other.state
+
+    def __lt__(self, other):
+        for i in range(min(len(self.state), len(other.state))):
+            if self.state[i] < other.state[i]:
+                return True
+            elif self.state[i] > other.state[i]:
+                return False
+            else:
+                continue
+        return False  # If it's the same starting elements, we still need to explore this state
 
     def __hash__(self):
         return hash(str(self.state))
@@ -143,8 +154,8 @@ class GameState:
                 craft_result == "Nothing" or
                 (not allow_starting_elements and craft_result in self.items) or
                 (allow_starting_elements and
-                    (craft_result == self.items[u] or craft_result == self.items[v] or
-                    (craft_result in self.items and self.used[self.items.index(craft_result)] != 0))) or
+                 (craft_result == self.items[u] or craft_result == self.items[v] or
+                  (craft_result in self.items and self.used[self.items.index(craft_result)] != 0))) or
                 # Even though we are looking for results in the original list, we still
                 # Don't want to use the result itself in any craft
                 craft_result in self.children):
@@ -186,23 +197,19 @@ def process_node(state: GameState):
 
     if tail_item not in visited:
         visited.add(tail_item)
-        #  Dumb writing to file
-        if write_to_file:
-            with open(best_recipes_file, "a", encoding="utf-8") as file:
-                file.write(str(len(visited)) + ": " + str(state) + "\n\n")
 
     # Multiple recipes for the same item at same depth
-    if save_all_best_recipes:
-        depth = len(state) - len(init_state)
-        if state.tail_item() not in best_depths:
-            best_depths[state.tail_item()] = depth
-            best_recipes[state.tail_item()] = [state, ]
-        elif depth <= best_depths[state.tail_item()] + extra_depth:
-            best_recipes[state.tail_item()].append(state)
+    depth = len(state) - len(init_state)
+    if state.tail_item() not in best_depths:
+        best_depths[state.tail_item()] = depth
+        best_recipes[state.tail_item()] = [state.to_list(), ]
+    elif depth == best_depths[state.tail_item()]:
+        best_recipes[state.tail_item()].append(state.to_list())
 
 
 # Depth limited search
 async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> int:
+    global last_game_state, new_last_game_state
     """
     Depth limited search
     :param session: The session to use
@@ -210,7 +217,13 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
     :param depth: The depth remaining
     :return: The number of states processed
     """
+    # Resuming
+    if last_game_state is not None and len(last_game_state) >= len(state) + depth and state < last_game_state:
+        # print(f"Skipping state {state}")
+        return 0
+
     if depth == 0:  # We've reached the end of the crafts, process the node
+        new_last_game_state = state
         process_node(state)
         return 1
 
@@ -252,6 +265,10 @@ async def iterative_deepening_dfs(session: aiohttp.ClientSession):
 
     curDepth = 1
     start_time = time.perf_counter()
+    if last_game_state is not None:
+        curDepth = len(last_game_state) - len(init_state)
+        print(f"Resuming from depth {curDepth}")
+        print(last_game_state.state)
 
     while True:
         prev_visited = len(visited)
@@ -266,19 +283,12 @@ async def iterative_deepening_dfs(session: aiohttp.ClientSession):
             curDepth))
 
         print(f"{curDepth}   {len(visited)}     {time.perf_counter() - start_time:.4f}")
-        if curDepth >= depth_limit and depth_limit > 0:
+        if curDepth >= depth_limit > 0:
             break
         # Only relevant for local files - if exhausted the outputs, stop
-        if len(visited) == prev_visited:
+        if len(visited) == prev_visited and curDepth > len(last_game_state) - len(init_state):
             break
         curDepth += 1
-
-    if save_all_best_recipes:
-        best_recipes_json = {}
-        for key, value in best_recipes.items():
-            best_recipes_json[key] = [r.to_list() for r in value]
-        with open(all_best_recipes_file, "w", encoding="utf-8") as file:
-            json.dump(best_recipes_json, file, ensure_ascii=False, indent=4)
 
 
 async def main():
@@ -299,6 +309,43 @@ async def main():
                 print('Key: "%s", Value: "%s"' % (cookie.key, cookie.value))
 
         await iterative_deepening_dfs(session)
+
+
+def load_last_state():
+    global new_last_game_state, last_game_state, visited, best_depths, best_recipes
+    try:
+        with open("persistent.json", "r", encoding="utf-8") as file:
+            last_state_json = json.load(file)
+        last_game_state = GameState(
+            [],
+            last_state_json["GameState"],
+            set(),
+            []
+        )
+        new_last_game_state = last_game_state
+        visited = set(last_state_json["Visited"])
+        best_recipes = last_state_json["BestRecipes"]
+        best_depths = last_state_json["BestDepths"]
+    except FileNotFoundError:
+        last_game_state = None
+
+
+if resume_last_run:
+    load_last_state()
+
+
+@atexit.register
+def save_last_state():
+    if new_last_game_state is None:
+        return
+    last_state_json = {
+        "GameState": new_last_game_state.state,
+        "Visited": list(visited),
+        "BestDepths": best_depths,
+        "BestRecipes": best_recipes
+    }
+    with open("persistent.json", "w", encoding="utf-8") as file:
+        json.dump(last_state_json, file, ensure_ascii=False, indent=4)
 
 
 if __name__ == "__main__":

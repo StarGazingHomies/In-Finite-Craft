@@ -63,7 +63,6 @@ class RecipeHandler:
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
     local_only: bool = False
-    trust_cache_nothing: bool = True  # Trust the local cache for "Nothing" results
     trust_first_run_nothing: bool = False  # Save as "Nothing" in the first run
     local_nothing_indication: str = "Nothing\t"  # Indication of untrusted "Nothing" in the local cache
     nothing_verification: int = 3  # Verify "Nothing" n times with the API
@@ -105,7 +104,8 @@ class RecipeHandler:
         # # Nothing is -1, local_nothing_indication is -2
         self.add_item_force_id("Nothing", '', False, -1)
         self.add_item_force_id(self.local_nothing_indication, '', False, -2)
-        #
+
+        # (semi-to do) run the sql command outside of this program
         # # Get rid of "nothing"s, if we don't trust "nothing"s.
         # if not self.trust_cache_nothing:
         #     temp_set = frozenset(self.recipes_cache.items())
@@ -115,7 +115,7 @@ class RecipeHandler:
         #     save_json(self.recipes_cache, self.recipes_file)
 
     def add_item(self, item: str, emoji: str, first_discovery: bool = False):
-        print(f"Adding: {item} ({emoji})")
+        # print(f"Adding: {item} ({emoji})")
         cur = self.db.cursor()
         cur.execute("INSERT INTO items (emoji, name, first_discovery) VALUES (?, ?, ?) "
                     "ON CONFLICT (name) DO UPDATE SET "
@@ -124,7 +124,7 @@ class RecipeHandler:
                     (emoji, item, first_discovery))
 
     def add_starting_item(self, item: str, emoji: str, first_discovery: bool = False):
-        print(f"Adding: {item} ({emoji})")
+        # print(f"Adding: {item} ({emoji})")
         cur = self.db.cursor()
         cur.execute("INSERT INTO items (emoji, name, first_discovery) VALUES (?, ?, ?) "
                     "ON CONFLICT (name) DO NOTHING",
@@ -144,7 +144,7 @@ class RecipeHandler:
         if a > b:
             a, b = b, a
 
-        print(f"Adding: {a} + {b} -> {result}")
+        # print(f"Adding: {a} + {b} -> {result}")
         cur = self.db.cursor()
         cur.execute(insert_recipe, (a, b, result))
 

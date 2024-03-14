@@ -13,11 +13,15 @@ are not comparable between them.
 TODO:
 - Saving current progress, and resuming from the last point to avoid heavy precompute
 - Better configuration (CLI arguments or config file)
-- Use a proper database for recipes and items
 
 Future TODO:
 - Speedrun auto-optimization (minimum spanning hypergraph)
-- 
+
+
+## Version 1.4
+
+Implemented SQLite because the db size is growing and memory is no longer sufficient.
+This gives a ~10x performance hit, so I will also have to implement resuming.
 
 ## Version 1.3.2
 
