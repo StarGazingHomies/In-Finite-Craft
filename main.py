@@ -1,12 +1,10 @@
+import multiprocessing
 import os
 import time
-from functools import cache
+from functools import cache, partial
 from typing import Optional
-from urllib.parse import quote_plus
 
 import json
-import asyncio
-import aiohttp
 
 import recipe
 
@@ -50,7 +48,9 @@ for l1 in letters:
 # init_state = tuple(list(init_state) + elements + ["Periodic Table",])
 # init_state = tuple(list(init_state) + letters + letters2)
 recipe_handler = recipe.RecipeHandler(init_state)
-depth_limit = 1
+depth_limit = 6
+thread_preproc_depth = 3  # Nonpositive numbers turn it off
+num_threads = 32
 
 best_recipes: dict[str, list['GameState']] = dict()
 visited = set()
@@ -59,8 +59,8 @@ best_recipes_file: str = "best_recipes.txt"
 all_best_recipes_file: str = "all_best_recipes_depth_10_filtered.json"
 extra_depth = 0
 save_all_best_recipes: bool = False
-case_sensitive: bool = True
-write_to_file: bool = True
+case_sensitive: bool = False
+write_to_file: bool = False
 three_letter_search: bool = False
 allow_starting_elements: bool = False
 
@@ -129,22 +129,22 @@ class GameState:
             l.append((self.items[left], self.items[right], self.items[i]))
         return l
 
-    async def child(self, session: aiohttp.ClientSession, i: int) -> Optional['GameState']:
+    def child(self, i: int) -> Optional['GameState']:
         # Invalid indices
         if i <= self.tail_index() or i >= limit(len(self)):
             return None
 
         # Craft the items
         u, v = int_to_pair(i)
-        craft_result = await recipe_handler.combine(session, self.items[u], self.items[v])
+        craft_result = recipe_handler.combine(self.items[u], self.items[v])
 
         # Invalid crafts, items we already have, or items that can be crafted earlier are ignored.
         if (craft_result is None or
                 craft_result == "Nothing" or
                 (not allow_starting_elements and craft_result in self.items) or
                 (allow_starting_elements and
-                    (craft_result == self.items[u] or craft_result == self.items[v] or
-                    (craft_result in self.items and self.used[self.items.index(craft_result)] != 0))) or
+                 (craft_result == self.items[u] or craft_result == self.items[v] or
+                  (craft_result in self.items and self.used[self.items.index(craft_result)] != 0))) or
                 # Even though we are looking for results in the original list, we still
                 # Don't want to use the result itself in any craft
                 craft_result in self.children):
@@ -175,78 +175,115 @@ class GameState:
         return self.state[-1]
 
 
-def process_node(state: GameState):
+def process_node(state: GameState) -> None:
+    tail_item = state.tail_item()
     if three_letter_search:
-        if len(state.tail_item()) != 3 or not state.tail_item().isalpha():
+        if len(tail_item) != 3 or not tail_item.isalpha():
             return
 
+    if tail_item not in visited:
+        visited.add(tail_item)
+
+    if save_all_best_recipes:
+        depth = len(state) - len(init_state)
+        if state.tail_item() not in best_depths:
+            best_depths[state.tail_item()] = depth
+            best_recipes[state.tail_item()] = [state]
+        elif depth <= best_depths[state.tail_item()] + extra_depth:
+            best_recipes[state.tail_item()].append(state)
+
+
+def filter_node(state: GameState) -> bool:
     tail_item = state.tail_item()
     if not case_sensitive:
         tail_item = tail_item.upper()
 
     if tail_item not in visited:
-        visited.add(tail_item)
+        # visited.add(tail_item)
+        return True
         #  Dumb writing to file
-        if write_to_file:
-            with open(best_recipes_file, "a", encoding="utf-8") as file:
-                file.write(str(len(visited)) + ": " + str(state) + "\n\n")
+        # if write_to_file:
+        #     with open(best_recipes_file, "a", encoding="utf-8") as file:
+        #         file.write(str(len(visited)) + ": " + str(state) + "\n\n")
 
     # Multiple recipes for the same item at same depth
     if save_all_best_recipes:
         depth = len(state) - len(init_state)
         if state.tail_item() not in best_depths:
-            best_depths[state.tail_item()] = depth
-            best_recipes[state.tail_item()] = [state, ]
+            return True
         elif depth <= best_depths[state.tail_item()] + extra_depth:
-            best_recipes[state.tail_item()].append(state)
+            return False
 
 
-# Depth limited search
-async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> int:
-    """
-    Depth limited search
-    :param session: The session to use
-    :param state: The current state
-    :param depth: The depth remaining
-    :return: The number of states processed
-    """
+def dls_pre_thread(state: GameState, depth: int) -> list[GameState]:
     if depth == 0:  # We've reached the end of the crafts, process the node
-        process_node(state)
-        return 1
+        return [state]
 
-    # 30 char limit, according to PB and laurasia
+    # 30 char limit, confirmed by Neal
     if len(state.tail_item()) > recipe.WORD_COMBINE_CHAR_LIMIT:
-        return 0
+        return []
 
     # Even if we allowed starting element results, we're still not going to continue from such a state
     if allow_starting_elements and state.tail_item() in state.items[:-1]:
-        return 0
+        return []
 
-    count = 0  # States counter
+    count: list[GameState] = []  # States
+    # NO unused items check because this is for preprocessing states before threading
+    # so the depth isn't meaningful here.
+    lower_limit = 0
+    for i in range(lower_limit, limit(len(state))):  # Regular ol' searching
+        child = state.child(i)
+        if child is not None:
+            count += dls_pre_thread(child, depth - 1)
+
+    return count
+
+
+def dls_post_thread(state: GameState, depth: int) -> list[GameState]:
+    """
+    Depth limited search
+    :param state: The current state
+    :param depth: The depth remaining
+    :return: The potentially optimal GameStates
+    """
+    if depth == 0:  # We've reached the end of the crafts, process the node
+        if filter_node(state):
+            return [state]
+        return []
+
+    # 30 char limit, according to PB and laurasia
+    if len(state.tail_item()) > recipe.WORD_COMBINE_CHAR_LIMIT:
+        return []
+
+    # Even if we allowed starting element results, we're still not going to continue from such a state
+    if allow_starting_elements and state.tail_item() in state.items[:-1]:
+        return []
+
+    states = []
     unused_items = state.unused_items()  # Unused items
     if len(unused_items) > depth + 1:  # Impossible to use all elements, since we have too few crafts left
-        return 0
+        return []
     elif len(unused_items) > depth:  # We must start using unused elements NOW.
         for j in range(len(unused_items)):  # For loop ordering is important. We want increasing pair_to_int order.
             for i in range(j):  # i != j. We have to use two for unused_items to decrease.
-                child = await state.child(session, pair_to_int(unused_items[i], unused_items[j]))
+                child = state.child(pair_to_int(unused_items[i], unused_items[j]))
                 if child is not None:
-                    count += await dls(session, child, depth - 1)
-        return count
+                    states += dls_post_thread(child, depth - 1)
+        return states
     else:
         lower_limit = 0
         if depth == 1 and state.tail_index() != -1:  # Must use the 2nd last element, if it's not a default item.
             lower_limit = limit(len(state) - 1)
 
         for i in range(lower_limit, limit(len(state))):  # Regular ol' searching
-            child = await state.child(session, i)
+            child = state.child(i)
             if child is not None:
-                count += await dls(session, child, depth - 1)
+                states += dls_post_thread(child, depth - 1)
 
-        return count
+        return states
 
 
-async def iterative_deepening_dfs(session: aiohttp.ClientSession):
+def iterative_deepening_dfs():
     # Clear best recipes file
     open(best_recipes_file, "w").close()
 
@@ -255,18 +292,42 @@ async def iterative_deepening_dfs(session: aiohttp.ClientSession):
 
     while True:
         prev_visited = len(visited)
-        print(await dls(
-            session,
-            GameState(
-                list(init_state),
-                [-1 for _ in range(len(init_state))],
-                set(),
-                [0 for _ in range(len(init_state))]
-            ),
-            curDepth))
+        if curDepth > thread_preproc_depth > 0:
+            states = dls_pre_thread(
+                GameState(
+                    list(init_state),
+                    [-1 for _ in range(len(init_state))],
+                    set(),
+                    [0 for _ in range(len(init_state))]
+                ),
+                thread_preproc_depth)
+
+            with multiprocessing.Pool(num_threads) as pool:
+                new_states = pool.map(partial(dls_post_thread, depth=curDepth - thread_preproc_depth), states)
+
+            # for state in states:
+            #     # print(state)
+            #     total_states += dls(state, curDepth - thread_preproc_depth)
+            total_states = 0
+            for batch in new_states:
+                total_states += len(batch)
+                for state in batch:
+                    process_node(state)
+            print(f"{total_states}")
+        else:
+            states = dls_post_thread(
+                GameState(
+                    list(init_state),
+                    [-1 for _ in range(len(init_state))],
+                    set(),
+                    [0 for _ in range(len(init_state))]
+                ), curDepth)
+            print(len(states))
+            for state in states:
+                process_node(state)
 
         print(f"{curDepth}   {len(visited)}     {time.perf_counter() - start_time:.4f}")
-        if curDepth >= depth_limit and depth_limit > 0:
+        if curDepth >= depth_limit > 0:
             break
         # Only relevant for local files - if exhausted the outputs, stop
         if len(visited) == prev_visited:
@@ -281,28 +342,11 @@ async def iterative_deepening_dfs(session: aiohttp.ClientSession):
             json.dump(best_recipes_json, file, ensure_ascii=False, indent=4)
 
 
-async def main():
+def main():
     # tracemalloc.start()
-    headers = {
-        "Referer": "https://neal.fun/infinite-craft/",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    }
-    async with aiohttp.ClientSession(headers=headers) as session:
-        async with session.get("https://neal.fun/infinite-craft/") as resp:
-            print("Status:", resp.status)
-            print("Content-type:", resp.headers['content-type'])
-
-            html = await resp.text()
-            print("Body:", html[:15], "...")
-            cookies = session.cookie_jar.filter_cookies('https://neal.fun/infinite-craft/')
-            for key, cookie in cookies.items():
-                print('Key: "%s", Value: "%s"' % (cookie.key, cookie.value))
-
-        await iterative_deepening_dfs(session)
+    iterative_deepening_dfs()
 
 
 if __name__ == "__main__":
-    if os.name == 'nt':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(main())
+    main()
     # print("\", \"".join(elements.split('\n')))

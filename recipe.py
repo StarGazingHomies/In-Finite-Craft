@@ -1,12 +1,14 @@
 import atexit
 import json
 import math
+import multiprocessing
 import os
 import sys
 import time
 import traceback
 from typing import Optional
 from urllib.parse import quote_plus
+import requests
 
 import aiohttp
 from bidict import bidict
@@ -31,38 +33,26 @@ def int_to_pair(n: int) -> tuple[int, int]:
     return i, j
 
 # Insert a recipe into the database
-insert_recipe = ("""
-    INSERT INTO recipes (ingredient1_id, ingredient2_id, result_id)
-    SELECT ing1.id, ing2.id, result.id
-    FROM items   AS result
-    JOIN items   AS ing1   ON ing1.name = ?
-    JOIN items   AS ing2   ON ing2.name = ?
-    WHERE result.name = ?
-    ON CONFLICT (ingredient1_id, ingredient2_id) DO UPDATE SET
-    result_id = EXCLUDED.result_id
-    """)
-
-# Query for a recipe
-query_recipe = ("""
-    SELECT result.name, result.emoji
-    FROM recipes
-    JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id
-    JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id
-    JOIN items   AS result ON result.id = recipes.result_id
-    WHERE ing1.name = ? AND ing2.name = ?
-    """)
+insert_recipe = ()
 
 
 class RecipeHandler:
     db: sqlite3.Connection
     db_location: str = "cache/recipes.db"
 
+    headers = {
+        "Referer": "https://neal.fun/infinite-craft/",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    }
+    session: requests.Session
+    requestLock: multiprocessing.Lock = multiprocessing.Lock()
+
     last_request: float = 0
     request_cooldown: float = 0.5  # 0.5s is safe for this API
     sleep_time: float = 1.0
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
-    local_only: bool = False
+    local_only: bool = False                 # Only use local cache
     trust_cache_nothing: bool = True  # Trust the local cache for "Nothing" results
     trust_first_run_nothing: bool = False  # Save as "Nothing" in the first run
     local_nothing_indication: str = "Nothing\t"  # Indication of untrusted "Nothing" in the local cache
@@ -71,6 +61,11 @@ class RecipeHandler:
     connection_timeout: float = 5.0  # Connection timeout
 
     def __init__(self, init_state):
+        # Initialize session
+        self.session = requests.Session()
+        self.session.headers = self.headers
+
+        # Initialize database
         self.db = sqlite3.connect(self.db_location)
         atexit.register(lambda: (self.db.commit(), self.db.close()))
         # Items table
@@ -115,7 +110,7 @@ class RecipeHandler:
         #     save_json(self.recipes_cache, self.recipes_file)
 
     def add_item(self, item: str, emoji: str, first_discovery: bool = False):
-        print(f"Adding: {item} ({emoji})")
+        # print(f"Adding: {item} ({emoji})")
         cur = self.db.cursor()
         cur.execute("INSERT INTO items (emoji, name, first_discovery) VALUES (?, ?, ?) "
                     "ON CONFLICT (name) DO UPDATE SET "
@@ -124,7 +119,7 @@ class RecipeHandler:
                     (emoji, item, first_discovery))
 
     def add_starting_item(self, item: str, emoji: str, first_discovery: bool = False):
-        print(f"Adding: {item} ({emoji})")
+        # print(f"Adding: {item} ({emoji})")
         cur = self.db.cursor()
         cur.execute("INSERT INTO items (emoji, name, first_discovery) VALUES (?, ?, ?) "
                     "ON CONFLICT (name) DO NOTHING",
@@ -144,9 +139,31 @@ class RecipeHandler:
         if a > b:
             a, b = b, a
 
-        print(f"Adding: {a} + {b} -> {result}")
+        # print(f"Adding: {a} + {b} -> {result}")
         cur = self.db.cursor()
-        cur.execute(insert_recipe, (a, b, result))
+        cur.execute("""
+    INSERT INTO recipes (ingredient1_id, ingredient2_id, result_id)
+    SELECT ing1.id, ing2.id, result.id
+    FROM items   AS result
+    JOIN items   AS ing1   ON ing1.name = ?
+    JOIN items   AS ing2   ON ing2.name = ?
+    WHERE result.name = ?
+    ON CONFLICT (ingredient1_id, ingredient2_id) DO UPDATE SET
+    result_id = EXCLUDED.result_id
+    """, (a, b, result))
+
+    def mass_add_recipe(self, recipe_list: list[tuple[str, str, str]]):
+        cur = self.db.cursor()
+        cur.executemany("""
+    INSERT INTO recipes (ingredient1_id, ingredient2_id, result_id)
+    SELECT ing1.id, ing2.id, result.id
+    FROM items   AS result
+    JOIN items   AS ing1   ON ing1.name = ?
+    JOIN items   AS ing2   ON ing2.name = ?
+    WHERE result.name = ?
+    ON CONFLICT (ingredient1_id, ingredient2_id) DO UPDATE SET
+    result_id = EXCLUDED.result_id
+    """, recipe_list)
 
     def save_response(self, a: str, b: str, response: dict):
         result = response['result']
@@ -178,8 +195,16 @@ class RecipeHandler:
         if a > b:
             a, b = b, a
         cur = self.db.cursor()
-        cur.execute(query_recipe, (a, b))
+        cur.execute("""
+                        SELECT result.name
+                        FROM recipes
+                        JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id
+                        JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id
+                        JOIN items   AS result ON result.id = recipes.result_id
+                        WHERE ing1.name = ? AND ing2.name = ?""",
+                    (a, b))
         result = cur.fetchone()
+        # print(f"Local result: {a} + {b} -> {result}")
         if result:
             return result[0]
         else:
@@ -210,7 +235,9 @@ class RecipeHandler:
     #     return recipes
 
     # Adapted from analog_hors on Discord
-    async def combine(self, session: aiohttp.ClientSession, a: str, b: str) -> str:
+    def combine(self, a: str, b: str) -> str:
+        if a > b:
+            a, b = b, a
         # Query local cache
         local_result = self.get_local(a, b)
         # print(f"Local result: {a} + {b} -> {local_result}")
@@ -234,7 +261,7 @@ class RecipeHandler:
             return "Nothing"
 
         # print(f"Requesting {a} + {b}", flush=True)
-        r = await self.request_pair(session, a, b)
+        r = self.request_pair(a, b)
 
         nothing_count = 1
         while (local_result != self.local_nothing_indication and  # "Nothing" in local cache is long, long ago
@@ -246,43 +273,45 @@ class RecipeHandler:
             time.sleep(self.nothing_cooldown)
             print("Re-requesting Nothing result...", flush=True)
 
-            r = await self.request_pair(session, a, b)
+            r = self.request_pair(a, b)
 
             nothing_count += 1
+            self.save_response(a, b, {"result": "Nothing", "emoji": "", "isNew": False})
+            return r['result']
 
         self.save_response(a, b, r)
         return r['result']
 
-    async def request_pair(self, session: aiohttp.ClientSession, a: str, b: str) -> dict:
-        # with requestLock:
-        a_req = quote_plus(a)
-        b_req = quote_plus(b)
+    def request_pair(self, a: str, b: str) -> dict:
+        with self.requestLock:
+            a_req = quote_plus(a)
+            b_req = quote_plus(b)
 
-        # Don't request too quickly. Have been 429'd way too many times
-        t = time.perf_counter()
-        if (t - self.last_request) < self.request_cooldown:
-            time.sleep(self.request_cooldown - (t - self.last_request))
-        self.last_request = time.perf_counter()
+            # Don't request too quickly. Have been 429'd way too many times
+            t = time.perf_counter()
+            if (t - self.last_request) < self.request_cooldown:
+                time.sleep(self.request_cooldown - (t - self.last_request))
+            self.last_request = time.perf_counter()
 
-        url = f"https://neal.fun/api/infinite-craft/pair?first={a_req}&second={b_req}"
+            url = f"https://neal.fun/api/infinite-craft/pair?first={a_req}&second={b_req}"
 
-        while True:
-            try:
-                # print(url, type(url))
-                async with session.get(url) as resp:
-                    # print(resp.status)
-                    if resp.status == 200:
-                        self.sleep_time = self.sleep_default
-                        return await resp.json()
-                    else:
-                        print(f"Request failed with status {resp.status}", file=sys.stderr)
-                        time.sleep(self.sleep_time)
-                        self.sleep_time *= self.retry_exponent
-                        print("Retrying...", flush=True)
-            except Exception as e:
-                # Handling more than just that one error
-                print("Unrecognized Error: ", e, file=sys.stderr)
-                traceback.print_exc()
-                time.sleep(self.sleep_time)
-                self.sleep_time *= self.retry_exponent
-                print("Retrying...", flush=True)
+            while True:
+                try:
+                    # print(url, type(url))
+                    with self.session.get(url) as resp:
+                        # print(resp.status)
+                        if resp.status_code == 200:
+                            self.sleep_time = self.sleep_default
+                            return resp.json()
+                        else:
+                            print(f"Request failed with status {resp.status_code}", file=sys.stderr)
+                            time.sleep(self.sleep_time)
+                            self.sleep_time *= self.retry_exponent
+                            print("Retrying...", flush=True)
+                except Exception as e:
+                    # Handling more than just that one error
+                    print("Unrecognized Error: ", e, file=sys.stderr)
+                    traceback.print_exc()
+                    time.sleep(self.sleep_time)
+                    self.sleep_time *= self.retry_exponent
+                    print("Retrying...", flush=True)

@@ -420,8 +420,47 @@ def convert_to_savefile(savefile: str, items_file: str, recipes_file: str):
         json.dump(new_data, f, ensure_ascii=False)
 
 
+def add_to_recipe_handler(items_file: str, recipes_file: str):
+    with open(items_file, "r", encoding="utf-8") as f:
+        items = json.load(f)
+    with open(recipes_file, "r", encoding="utf-8") as f:
+        recipes = json.load(f)
+
+    rh = recipe.RecipeHandler(("Water", "Fire", "Wind", "Earth"))
+
+    items_reverse = {v[1]: [v[0], k, v[2]] for k, v in items.items()}
+    items_reverse[-1] = ["", "Nothing", False]
+    items_reverse[-2] = ["", "Nothing\t", False]
+
+    for key, value in items.items():
+        rh.add_item(key, value[0], value[2])
+
+    i = 0
+    recipes_to_add = []
+    for key, value in recipes.items():
+        i += 1
+        if i % 100000 == 0:
+            rh.mass_add_recipe(recipes_to_add)
+            recipes_to_add = []
+            print(f"Processed {i} of {len(recipes)} recipes")
+        # if value < 0:
+        #     continue
+        key = int(key)
+        value = int(value)
+        u, v = recipe.int_to_pair(key)
+        u_item = items_reverse[u][1]
+        v_item = items_reverse[v][1]
+        result = items_reverse[value][1]
+        if u_item > v_item:
+            u_item, v_item = v_item, u_item  # Swap to ensure u < v
+        recipes_to_add.append((u_item, v_item, result))
+
+    rh.mass_add_recipe(recipes_to_add)
+
+
 if __name__ == '__main__':
-    convert_to_savefile("infinitecraft.json", "cache/items.json", "cache/recipes.json")
+    add_to_recipe_handler("cache/items.json", "cache/recipes.json")
+    # convert_to_savefile("infinitecraft.json", "cache/items.json", "cache/recipes.json")
     # get_results_for(["Obama"])
     # print(ordered_total(0, 0, 2))
     # alpha_3_tmp("best_recipes.txt", "three_letters.txt")
