@@ -1,8 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <module type="PYTHON_MODULE" version="4">
   <component name="NewModuleRootManager">
-    <content url="file://$MODULE_DIR$" />
-    <orderEntry type="jdk" jdkName="Python 3.10" jdkType="Python SDK" />
+    <content url="file://$MODULE_DIR$">
+      <excludeFolder url="file://$MODULE_DIR$/cache/backup - depth 10 complete" />
+      <excludeFolder url="file://$MODULE_DIR$/cache/backup - depth 10 post id post merge" />
+      <excludeFolder url="file://$MODULE_DIR$/cache/backup - depth 10 post id pre lapisfloof merge 2" />
+      <excludeFolder url="file://$MODULE_DIR$/cache/backup - depth 10 pre check" />
+      <excludeFolder url="file://$MODULE_DIR$/cache/backup - depth 10 pre check periodic 2" />
+      <excludeFolder url="file://$MODULE_DIR$/cache/backup - depth 10 pre id" />
+      <excludeFolder url="file://$MODULE_DIR$/cache/backup - depth 10.1" />
+      <excludeFolder url="file://$MODULE_DIR$/cache/backup - depth 10.2" />
+      <excludeFolder url="file://$MODULE_DIR$/cache/backup - depth 9" />
+      <excludeFolder url="file://$MODULE_DIR$/cache/backup - depth 9.1" />
+      <excludeFolder url="file://$MODULE_DIR$/cache/backup - depth 9.2 nothing check" />
+      <excludeFolder url="file://$MODULE_DIR$/cache/backup - depth 9.5" />
+      <excludeFolder url="file://$MODULE_DIR$/cache/backup - depth 9.8" />
+      <excludeFolder url="file://$MODULE_DIR$/cache/backup - letter search 0.5" />
+      <excludeFolder url="file://$MODULE_DIR$/venv" />
+    </content>
+    <orderEntry type="jdk" jdkName="Python 3.10 (Infinite-Craft)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>

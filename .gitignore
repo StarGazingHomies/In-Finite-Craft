@@ -5,9 +5,13 @@ recipes.txt
 # Other stuff
 .idea/*
 pycache/*
+misc/*
 *.pyc
 *.txt
 *.json
+
+# Spreadsheet wee
+3 letter spreadsheet/*
 
 # Unignore requirements
 !requirements.txt
