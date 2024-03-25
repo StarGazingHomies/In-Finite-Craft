@@ -39,11 +39,6 @@ letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
 
 rearrange_words = ["Anagram", "Reverse", "Opposite", "Scramble", "Rearrange", "Palindrome", "Not"]
 
-# If capitalization matters...
-# letters2 = ["AA", "Ab", "Ac", "Ad", "AE", "AF", "Ag", "AH", "Ai", "Aj", "AK", "Al", "Am", "An", "AO", "AP", "AQ", "Ar", "As", "At", "Au", "Av", "AW", "Ax", "AY", "Az",
-#             "BA", "Bb", "BC", "BD", "Be", "BF", "BG", "BH", "Bi", "BJ", "BK", "BL", "BM", "Bn", "BO", "BP", "BQ", "BR", "BS", "BT", "BU", "BV", "BW", "Bx", "BY", "Bz"]
-# Not going to continue for now.
-
 letters2 = []
 for l1 in letters:
     for l2 in letters:
@@ -53,14 +48,16 @@ for l1 in letters:
 # init_state = tuple(list(init_state) + letters + letters2)
 recipe_handler = recipe.RecipeHandler(init_state)
 depth_limit = 11
+extra_depth = 1
 
 best_recipes: dict[str, list[list[tuple[str, str, str]]]] = dict()
 visited = set()
 best_depths: dict[str, int] = dict()
 best_recipes_file: str = "best_recipes.txt"
 all_best_recipes_file: str = "all_best_recipes_depth_10_filtered.json"
+persistent_file: str = "persistent.json"
+persistent_temporary_file: str = "persistent2.json"
 case_sensitive: bool = True
-three_letter_search: bool = False
 allow_starting_elements: bool = False
 resume_last_run: bool = True
 last_game_state: Optional['GameState'] = None
@@ -192,10 +189,6 @@ class GameState:
 def process_node(state: GameState):
     global autosave_counter
 
-    if three_letter_search:
-        if len(state.tail_item()) != 3 or not state.tail_item().isalpha():
-            return
-
     tail_item = state.tail_item()
     if not case_sensitive:
         tail_item = tail_item.upper()
@@ -215,7 +208,7 @@ def process_node(state: GameState):
     if state.tail_item() not in best_depths:
         best_depths[state.tail_item()] = depth
         best_recipes[state.tail_item()] = [state.to_list(), ]
-    elif depth == best_depths[state.tail_item()]:
+    elif depth <= best_depths[state.tail_item()] + extra_depth:
         best_recipes[state.tail_item()].append(state.to_list())
 
 
@@ -306,20 +299,20 @@ async def iterative_deepening_dfs(session: aiohttp.ClientSession):
 
 async def main():
     # tracemalloc.start()
-    headers = {
-        "Referer": "https://neal.fun/infinite-craft/",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    }
-    async with aiohttp.ClientSession(headers=headers) as session:
-        async with session.get("https://neal.fun/infinite-craft/") as resp:
-            # print("Status:", resp.status)
-            # print("Content-type:", resp.headers['content-type'])
+    headers = recipe.load_json("headers.json")["default"]
+    async with aiohttp.ClientSession() as session:
+        async with session.get("https://neal.fun/infinite-craft/", headers=headers) as resp:
+            print("Status:", resp.status)
+            print("Content-type:", resp.headers['content-type'])
 
             html = await resp.text()
+            # Save the html
+            # with open("infinite-craft.html", "w", encoding="utf-8") as file:
+            #     file.write(html)
             # print("Body:", html[:15], "...")
-            # cookies = session.cookie_jar.filter_cookies('https://neal.fun/infinite-craft/')
-            # for key, cookie in cookies.items():
-            #     print('Key: "%s", Value: "%s"' % (cookie.key, cookie.value))
+            cookies = session.cookie_jar.filter_cookies('https://neal.fun/infinite-craft/')
+            for key, cookie in cookies.items():
+                print('Key: "%s", Value: "%s"' % (cookie.key, cookie.value))
 
         await iterative_deepening_dfs(session)
 
@@ -327,7 +320,7 @@ async def main():
 def load_last_state():
     global new_last_game_state, last_game_state, visited, best_depths, best_recipes
     try:
-        with open("persistent.json", "r", encoding="utf-8") as file:
+        with open(persistent_file, "r", encoding="utf-8") as file:
             last_state_json = json.load(file)
         last_game_state = GameState(
             [],
@@ -358,9 +351,9 @@ def save_last_state():
         "BestDepths": best_depths,
         "BestRecipes": best_recipes
     }
-    with open("persistent2.json", "w", encoding="utf-8") as file:
+    with open(persistent_temporary_file, "w", encoding="utf-8") as file:
         json.dump(last_state_json, file, ensure_ascii=False, indent=4)
-    os.replace("persistent2.json", "persistent.json")
+    os.replace(persistent_temporary_file, persistent_file)
 
 
 if __name__ == "__main__":

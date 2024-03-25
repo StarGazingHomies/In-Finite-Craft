@@ -12,7 +12,6 @@ import aiohttp
 from bidict import bidict
 import sqlite3
 
-
 WORD_TOKEN_LIMIT = 20
 WORD_COMBINE_CHAR_LIMIT = 30
 
@@ -52,6 +51,16 @@ query_recipe = ("""
     """)
 
 
+def load_json(file: str) -> dict:
+    try:
+        with open(file, "r", encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError:
+        return {}
+
+
 class RecipeHandler:
     db: sqlite3.Connection
     db_location: str = "cache/recipes.db"
@@ -61,7 +70,7 @@ class RecipeHandler:
     sleep_time: float = 1.0
     sleep_default: float = 1.0
     retry_exponent: float = 2.0
-    local_only: bool = False
+    local_only: bool = True
     trust_cache_nothing: bool = True  # Trust the local cache for "Nothing" results
     trust_first_run_nothing: bool = False  # Save as "Nothing" in the first run
     local_nothing_indication: str = "Nothing\t"  # Indication of untrusted "Nothing" in the local cache
@@ -69,7 +78,12 @@ class RecipeHandler:
     nothing_cooldown: float = 5.0  # Cooldown between "Nothing" verifications
     connection_timeout: float = 5.0  # Connection timeout
 
+    headers: dict[str, str] = {}
+
     def __init__(self, init_state):
+        # Load headers
+        self.headers = load_json("headers.json")["api"]
+
         self.db = sqlite3.connect(self.db_location)
         atexit.register(lambda: (self.db.commit(), self.db.close()))
         # Items table
@@ -147,6 +161,15 @@ class RecipeHandler:
         cur = self.db.cursor()
         cur.execute(insert_recipe, (a, b, result))
 
+    def delete_recipe(self, a: str, b: str):
+        if a > b:
+            a, b = b, a
+        cur = self.db.cursor()
+        cur.execute("DELETE FROM recipes"
+                    "JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id"
+                    "JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id"
+                    "WHERE ing1.name = ? AND ing2.name = ?", (a, b))
+
     def save_response(self, a: str, b: str, response: dict):
         result = response['result']
         try:
@@ -183,6 +206,40 @@ class RecipeHandler:
             return result[0]
         else:
             return None
+
+    def get_uses(self, a: str) -> list[tuple[str, str]]:
+        cur = self.db.cursor()
+        cur.execute("""
+            SELECT ing2.name, result.name
+            FROM recipes
+            JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id
+            JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id
+            JOIN items   AS result ON result.id = recipes.result_id
+            WHERE ing1.name = ?
+            """, (a,))
+        part1 = cur.fetchall()
+        cur.execute("""
+            SELECT ing1.name, result.name
+            FROM recipes
+            JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id
+            JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id
+            JOIN items   AS result ON result.id = recipes.result_id
+            WHERE ing2.name = ?
+            """, (a,))
+        part2 = cur.fetchall()
+        return part1 + part2
+
+    def get_crafts(self, result: str) -> list[tuple[str, str]]:
+        cur = self.db.cursor()
+        cur.execute("""
+            SELECT ing1.name, ing2.name
+            FROM recipes
+            JOIN items   AS ing1   ON ing1.id = recipes.ingredient1_id
+            JOIN items   AS ing2   ON ing2.id = recipes.ingredient2_id
+            JOIN items   AS result ON result.id = recipes.result_id
+            WHERE result.name = ?
+            """, (result,))
+        return cur.fetchall()
 
     # def get_local_results_for(self, r: str) -> list[tuple[str, str]]:
     #     if r not in self.items_cache:
@@ -253,6 +310,8 @@ class RecipeHandler:
         return r['result']
 
     async def request_pair(self, session: aiohttp.ClientSession, a: str, b: str) -> dict:
+        if len(a) > WORD_COMBINE_CHAR_LIMIT or len(b) > WORD_COMBINE_CHAR_LIMIT:
+            return {"result": "Nothing", "emoji": "", "isNew": False}
         # with requestLock:
         a_req = quote_plus(a)
         b_req = quote_plus(b)
@@ -268,7 +327,7 @@ class RecipeHandler:
         while True:
             try:
                 # print(url, type(url))
-                async with session.get(url) as resp:
+                async with session.get(url, headers=self.headers) as resp:
                     # print(resp.status)
                     if resp.status == 200:
                         self.sleep_time = self.sleep_default
@@ -285,3 +344,77 @@ class RecipeHandler:
                 time.sleep(self.sleep_time)
                 self.sleep_time *= self.retry_exponent
                 print("Retrying...", flush=True)
+
+
+# Testing code / temporary code
+async def main():
+    pass
+    # letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
+    #            "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
+    #            "U", "V", "W", "X", "Y", "Z"]
+    #
+    # letters2 = []
+    # for l1 in letters:
+    #     for l2 in letters:
+    #         letters2.append(l1 + l2)
+    #
+    # r = RecipeHandler([])
+    # letter_recipes = {}
+    # for two_letter_combo in letters2:
+    #     uses = r.get_uses(two_letter_combo)
+    #     print(two_letter_combo, uses)
+    #     letter_recipes[two_letter_combo] = uses
+    #
+    # with open("letter_recipes.json", "w", encoding='utf-8') as f:
+    #     json.dump(letter_recipes, f, ensure_ascii=False, indent=4)
+    # target_words = ['Negative', 'Positive', '1']
+    # with open("letter_recipes.json", "r", encoding='utf-8') as f:
+    #     letter_recipes = json.load(f)
+    #
+    # new_letter_recipes = {}
+    # for l, recipes in letter_recipes.items():
+    #     r_set = set()
+    #     for a, b in recipes:
+    #         r_set.add((a, b))
+    #     new_letter_recipes[l] = r_set
+    #
+    # new_2_letters = []
+    # for l, recipes in new_letter_recipes.items():
+    #     if len(recipes) == 0:
+    #         print(l)
+    #         break
+    #     nothing_count = 0
+    #     nothing_recipes = []
+    #     valid_recipes = set()
+    #     for second, result in recipes:
+    #         if result == "Nothing" or result == "Nothing\t":
+    #             nothing_count += 1
+    #             nothing_recipes.append(second)
+    #             # print(f"{l} + {second} -> {result}")
+    #         else:
+    #             u, v = l, second
+    #             if u > v:
+    #                 u, v = v, u
+    #             valid_recipes.add((u, v, result))
+    #     nothing_recipes.sort()
+    #     nothing_ratio = nothing_count / len(recipes)
+    #     new_2_letters.append((nothing_ratio, nothing_count, len(recipes), l, valid_recipes, nothing_recipes))
+    #     if l == "HX":
+    #         earliest_recipe = ""
+    #         for u, v, r in valid_recipes:
+    #             other = u if u != "HX" else v
+    #             print(other)
+    #             if earliest_recipe == "" or earliest_recipe > other:
+    #                 print(f"New earliest: {other}")
+    #                 earliest_recipe = other
+    #         print(earliest_recipe)
+    # new_2_letters.sort(reverse=True)
+    # print("\n".join([f"{l}: {n}/{t} ({r:.2f}) - Valid: {vs if len(vs) > 0 else "None"}" for r, n, t, l, vs, ns in new_2_letters[:30]]))
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    if os.name == 'nt':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.run(main())
