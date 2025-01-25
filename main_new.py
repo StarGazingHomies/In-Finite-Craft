@@ -30,7 +30,7 @@ persistent_config = util.load_json("config.json")
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 6
+depth_limit = 4
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False
@@ -41,6 +41,10 @@ last_game_state: Optional['GameState'] = None
 new_last_game_state: Optional['GameState'] = None
 autosave_interval = 500  # Save persistent file every 500 new visited elements
 autosave_counter = 0
+
+init_state = ('Water', 'Fire', 'Wind', 'Earth',
+              'Lake', 'Lava', 'Stone', 'Obsidian', 'Glass', 'Lens', 'Camera', 'Mirror', 'Black', 'Ink', 'Photograph',
+              'Negative', 'Darkroom', 'Postcard', 'Developer', 'Google', 'Googol', '-1', '-2', 'Letter', '-A')
 
 
 @cache
@@ -212,8 +216,21 @@ def gamestate_from_strong_repr(s: str) -> GameState:
     return GameState(items, state, children, used)
 
 
-async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int):
+def process_state(state: GameState):
+    global autosave_counter, best_depths
 
+    tail_item = state.tail_item()
+
+    # Multiple recipes for the same item at same depth
+    depth = len(state) - len(init_state)
+    if tail_item not in best_depths:
+        best_depths[tail_item] = depth
+
+    if write_to_file and depth <= best_depths[tail_item] + extra_depth:
+        optimal_handler.add_optimal(tail_item, repr(state))
+
+
+async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int):
     # Maintain the following
     new_states: list[tuple[int, GameState]] = [(depth, init_state), ]
     waiting_states: list[tuple[int, GameState]] = []
@@ -224,8 +241,9 @@ async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int)
 
     dls_results: set[str] = set()
     loop_counter: int = 0
-    status_period: int = 10000
-
+    status_period: int = 1000
+    status_print_counter: int = 0
+    finished_state_counter: int = 0
 
     while len(new_states) > 0 or len(request_list) > 0:
         # print("----------- New Loop ------------")
@@ -233,12 +251,12 @@ async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int)
         loop_counter += 1
         if loop_counter >= status_period:
             # print(new_states, waiting_states, request_list, finished_requests, sep="\n")
-#             print(f"""New States: {len(new_states)} items
-# Waiting States: {len(waiting_states)} items
-# Request List: {len(request_list)} items
-# Finished requests: {len(finished_requests)} items\n""")
+            print(f"""Optimizer status:
+Loop #{loop_counter + status_period * status_print_counter} | Total requests: {recipe_handler.request_count}
+States queue:   {len(new_states)} new / {len(waiting_states)} waiting / {finished_state_counter} finished
+Requests queue: {len(request_list)} queued / {len(finished_requests)} complete\n""")
+            status_print_counter += 1
             loop_counter = 0
-
 
         if len(new_states) > 0:
             # print("> Processing new state")
@@ -250,7 +268,9 @@ async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int)
                 # print("> Found leaf state")
                 # print(str(cur_state))
                 dls_results.add(cur_state.tail_item())
-                # TODO: Process state
+                finished_state_counter += 1
+
+                process_state(cur_state)
                 continue
 
             # Get the requests
@@ -261,6 +281,7 @@ async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int)
 
             # Add the requests to the list
             for r in requests:
+                r = util.sort_pair(r[0], r[1])
                 if r in finished_requests:
                     finished_requests[r] = (finished_requests[r][0], finished_requests[r][1] + 1)
                 elif r in request_list:
@@ -298,18 +319,18 @@ async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int)
             finished = True
             for i in state.generate_children(depth):
                 u, v = util.int_to_pair(i)
+                a, b = util.sort_pair(state.items[u], state.items[v])
                 combination_result = None
                 if i < state.request_limit():
                     # Local result
-                    combination_result = recipe_handler.get_local(state.items[u], state.items[v])
+                    combination_result = recipe_handler.get_local(a, b)
                 else:
                     try:
-                        combination_result, count = finished_requests[(state.items[u], state.items[v])]
-                        # print(combination_result, count)
+                        combination_result, count = finished_requests[(a, b)]
                         if count == 1:
-                            finished_requests.pop((state.items[u], state.items[v]))
+                            finished_requests.pop((a, b))
                         else:
-                            finished_requests[(state.items[u], state.items[v])] = (combination_result, count - 1)
+                            finished_requests[(a, b)] = (combination_result, count - 1)
                     except KeyError:
                         finished = False
                         break
@@ -328,18 +349,20 @@ async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int)
 
 
 init_gamestate = GameState(
-                list(init_state),
-                [-1 for _ in range(len(init_state))],
-                set(),
-                [0 for _ in range(len(init_state))]
-            )
+    list(init_state),
+    [-1 for _ in range(len(init_state))],
+    set(),
+    [0 for _ in range(len(init_state))]
+)
 
 
 async def main():
+    optimal_handler.clear()
+
     t0 = time.perf_counter()
     async with aiohttp.ClientSession() as session:
         final_set = set()
-        for depth in range(1, depth_limit+1):
+        for depth in range(1, depth_limit + 1):
             r = await dls(
                 session,
                 init_gamestate.copy(),

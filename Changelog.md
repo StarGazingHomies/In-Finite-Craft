@@ -22,6 +22,11 @@ revivals.
 `mane-parallel` Shelved Ideas:
 - Lazy generation of recipes (not useful, unless the starting element set)
 is very large, which almost never happens.
+- 
+## Version 1.6.0a3
+- Fixed an ordering issue where `A+B` and `B+A` would be considered different.
+This improves performance significantly.
+
 
 ## Version 1.6.0a2
 - Added a counter to recipe handler to count request saturation.

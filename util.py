@@ -27,6 +27,12 @@ def int_to_pair(n: int) -> tuple[int, int]:
     return i, j
 
 
+def sort_pair(i: str, j: str) -> tuple[str, str]:
+    if j < i:
+        i, j = j, i
+    return i, j
+
+
 def file_sanitize(s: str) -> str:
     s = s.replace("%", "%%")
     s = s.replace("\\", "%b")  # Backslash
