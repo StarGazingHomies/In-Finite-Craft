@@ -6,12 +6,7 @@ from recipes.recipe_base import RecipeBase, RecipeResponse
 
 
 def get_key(a, b):
-    a = util.to_start_case(a)
-    b = util.to_start_case(b)
-    if a > b:
-        a, b = b, a
-
-    return f"{a}={b}"
+    return f"{a.lower()}={b.lower()}"
 
 
 class RecipeRam(RecipeBase):
@@ -26,7 +21,7 @@ class RecipeRam(RecipeBase):
 
     # Auto-commit settings
     auto_commit: bool = True
-    auto_commit_interval: int = 1000  # Commit every 1000 requests
+    auto_commit_interval: int = 10000  # Commit every 1000 updates
     current_response_count: int = 0
 
     def __init__(self, **kwargs):
@@ -59,6 +54,10 @@ class RecipeRam(RecipeBase):
         return results
 
     async def _update(self, a, b, result: RecipeResponse):
+        if result == util.LOCAL_NOTHING_INDICATION:
+            return
+        if result == "Nothing" and get_key(a, b) not in self.recipes_cache:
+            self.recipes_cache[get_key(a, b)] = util.LOCAL_NOTHING_INDICATION
         self.current_response_count += 1
         key = get_key(a, b)
         self.recipes_cache[key] = result[0]

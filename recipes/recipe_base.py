@@ -26,10 +26,10 @@ class RecipeBase(ABC):
     async def combine(self, a, b, *args, **kwargs) -> RecipeResponse:
         result = await self._combine(a, b, *args, **kwargs)
         if result:
-            print(f"{self._name}.combine({a}, {b})")
+            # print(f"{self._name}.combine({a}, {b})")
             return result
 
-        print(f"{self._name} -> ", end="")
+        # print(f"{self._name} -> ", end="")
         if self._next is None:
             return
 
@@ -73,7 +73,7 @@ class RecipeBase(ABC):
         return [(a, b, None) for a, b in batch]
 
     async def update(self, a, b, r):
-        print(f"{self._name}.update({a}, {b}, {r})")
+        # print(f"{self._name}.update({a}, {b}, {r})")
         await self._update(a, b, r)
 
     @abc.abstractmethod

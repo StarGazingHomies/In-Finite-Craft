@@ -8,6 +8,8 @@ from collections.abc import Iterator
 from functools import cache
 from typing import Optional
 from urllib.parse import quote_plus
+import cProfile
+
 
 import json
 import asyncio
@@ -15,6 +17,7 @@ import aiohttp
 
 import optimals
 import recipe
+import recipes
 import util
 from util import int_to_pair, pair_to_int, DEFAULT_STARTING_ITEMS, file_sanitize
 
@@ -72,15 +75,27 @@ result_directory: str = "Results"
 
 persistent_config = util.load_json("config.json")
 
-recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
+rdb = recipes.recipe_ram.RecipeRam(recipes_file="cache/recipes.json", items_file="cache/items.json")
+rdb.set_name("dict")
+
+db = recipes.recipe_sqlite.RecipeSqlite(util.DEFAULT_STARTING_ITEMS)
+db.set_name("sql")
+
+requester = recipes.recipe_requests.RecipeRequests(None, **persistent_config)
+requester.set_name("api")
+
+# rdb.set_next(requester)
+rdb.set_next(db).set_next(requester)
+
+
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 10
+depth_limit = 7
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False
 resume_last_run = False
 write_to_file = True
-multi_letter_file = "multi_letters.txt"
+# multi_letter_file = "multi_letters.txt"
 
 last_game_state: Optional['GameState'] = None
 new_last_game_state: Optional['GameState'] = None
@@ -152,14 +167,14 @@ class GameState:
             l.append((self.items[left], self.items[right], self.items[i]))
         return l
 
-    async def child(self, session: aiohttp.ClientSession, i: int) -> Optional['GameState']:
+    async def child(self, i: int) -> Optional['GameState']:
         # Invalid indices
         if i <= self.tail_index() or i >= limit(len(self)):
             return None
 
         # Craft the items
         u, v = int_to_pair(i)
-        craft_result = await recipe_handler.combine(session, self.items[u], self.items[v])
+        craft_result = (await rdb.combine(self.items[u], self.items[v]))[0]
 
         # Invalid crafts / no result
         if craft_result is None or craft_result == "Nothing":
@@ -210,6 +225,7 @@ def save_optimal_recipe(state: GameState):
 
 
 def process_node(state: GameState):
+    pass
     global autosave_counter
 
     tail_item = state.tail_item()
@@ -219,32 +235,31 @@ def process_node(state: GameState):
     if tail_item not in visited:
         visited.add(tail_item)
         autosave_counter += 1
-        if autosave_counter >= autosave_interval:
-            autosave_counter = 0
-            save_last_state()
-
-    num_of_letters = 0
-    for letter in state.items:
-        if letter in letters:
-            num_of_letters += 1
-    if num_of_letters >= 5:
-        with open('multi_letter_file', 'a') as file:
-            file.write(str(state) + "\n")
-
-    # Multiple recipes for the same item at same depth
-    depth = len(state) - len(init_state)
-    if state.tail_item() not in best_depths:
-        best_depths[state.tail_item()] = depth
-
-    if write_to_file and depth <= best_depths[state.tail_item()] + extra_depth:
-        save_optimal_recipe(state)
+        # if autosave_counter >= autosave_interval:
+        #     autosave_counter = 0
+        #     save_last_state()
+    #
+    # # num_of_letters = 0
+    # # for letter in state.items:
+    # #     if letter in letters:
+    # #         num_of_letters += 1
+    # # if num_of_letters >= 5:
+    # #     with open('multi_letter_file', 'a') as file:
+    # #         file.write(str(state) + "\n")
+    #
+    # # Multiple recipes for the same item at same depth
+    # depth = len(state) - len(init_state)
+    # if state.tail_item() not in best_depths:
+    #     best_depths[state.tail_item()] = depth
+    #
+    # if write_to_file and depth <= best_depths[state.tail_item()] + extra_depth:
+    #     save_optimal_recipe(state)
 
 
 # Depth limited search
-async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> int:
+async def dls(state: GameState, depth: int) -> int:
     """
     Depth limited search
-    :param session: The session to use
     :param state: The current state
     :param depth: The depth remaining
     :return: The number of states processed
@@ -283,16 +298,9 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
                 yield u, v
 
     # First do the batch requests
-    current_combinations = await recipe_handler.combine_batch(session, list(requests_gen()))
+    # current_combinations = await rdb.combine_batch(list(requests_gen()))
     # TODO: Only request locally a single time - that is, use the results above to inform next steps directly
     # instead of having to pass in recipe handler and let state.child request
-
-    async def search_child(c) -> int:
-        if c.tail_item() in letters:
-            c.used[-1] += 1
-            return await dls(session, c, depth)
-        else:
-            return await dls(session, c, depth - 1)
 
     count = 0  # States counter
     unused_items = state.unused_items()  # Unused items
@@ -301,23 +309,23 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
     elif len(unused_items) > depth:  # We must start using unused elements NOW.
         for j in range(len(unused_items)):  # For loop ordering is important. We want increasing pair_to_int order.
             for i in range(j):  # i != j. We have to use two for unused_items to decrease.
-                child = await state.child(session, pair_to_int(unused_items[i], unused_items[j]))
+                child = await state.child(pair_to_int(unused_items[i], unused_items[j]))
                 if child is not None:
-                    count += await search_child(child)
+                    count += await dls(child, depth - 1)
     else:
         lower_limit = 0
         if depth == 1 and state.tail_index() != -1:  # Must use the 2nd last element, if it's not a default item.
             lower_limit = limit(len(state) - 1)
 
         for i in range(lower_limit, limit(len(state))):  # Regular ol' searching
-            child = await state.child(session, i)
+            child = await state.child(i)
             if child is not None:
-                count += await search_child(child)
+                count += await dls(child, depth - 1)
 
     return count
 
 
-async def iterative_deepening_dfs(session: aiohttp.ClientSession):
+async def iterative_deepening_dfs():
 
     curDepth = 1
     start_time = time.perf_counter()
@@ -325,11 +333,12 @@ async def iterative_deepening_dfs(session: aiohttp.ClientSession):
         curDepth = len(last_game_state) - len(init_state)
         print(f"Resuming from depth {curDepth}")
         print(last_game_state.state)
+    else:
+        print("Starting from scratch")
 
     while True:
         prev_visited = len(visited)
         print(await dls(
-            session,
             GameState(
                 list(init_state),
                 [-1 for _ in range(len(init_state))],
@@ -342,8 +351,8 @@ async def iterative_deepening_dfs(session: aiohttp.ClientSession):
         if curDepth >= depth_limit > 0:
             break
         # Only relevant for local files - if exhausted the outputs, stop
-        if len(visited) == prev_visited and curDepth > len(last_game_state) - len(init_state):
-            break
+        # if len(visited) == prev_visited and curDepth > len(last_game_state) - len(init_state):
+        #     break
         curDepth += 1
 
 
@@ -355,8 +364,8 @@ async def main():
         optimal_handler.clear()
 
     async with aiohttp.ClientSession() as session:
-
-        await iterative_deepening_dfs(session)
+        requester.set_session(session)
+        await iterative_deepening_dfs()
 
 
 def load_last_state():

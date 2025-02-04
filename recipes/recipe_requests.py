@@ -39,6 +39,10 @@ class RecipeRequests(RecipeBase):
             setattr(self, key, value)
         self.session = session
 
+    def set_session(self, session: aiohttp.ClientSession):
+        self.session = session
+        return self
+
     # async def __aenter__(self):
     #     return self
     #
@@ -129,7 +133,7 @@ class RecipeRequests(RecipeBase):
 
         data = f'[["{a}", "{b}"]]'
         url = self.request_addr
-        print(url, data)
+        # print(url, data)
 
         while True:
             try:
@@ -175,11 +179,11 @@ class RecipeRequests(RecipeBase):
                     if resp.status == 200:
                         self.sleep_time = self.sleep_default
                         response = await resp.json(content_type=None)
-                        print(response)
+                        # print(response)
                         for i, val in enumerate(response):
                             val["result"] = util.uridecode(val["result"])
                             response[i] = val
-                        print(response)
+                        # print(response)
                         return response
                     else:
                         print(f"Batch request of {len(batch)} items failed with status {resp.status}", file=sys.stderr)

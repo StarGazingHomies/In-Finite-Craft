@@ -32,6 +32,13 @@ revivals.
 - Lazy generation of recipes (not useful, unless the starting element set)
 is very large, which almost never happens.
 
+## Version 1.6.0a6
+- Modified `main.py` to use the new requester logic.
+- Profiled a bit to see what the bottleneck is. Goal is to exceed V1.3 speeds, 
+on both `main.py` and `main_new.py`.
+- Removed `combine_batch` pre-call, since it's no longer necessary.
+- Current speed: 1.932s for 7-step, which is slower than 0.812s. By a lot. :(
+
 
 ## Version 1.6.0a5
 - Added a `recipes_base.py` and the `RecipeBase` abc
