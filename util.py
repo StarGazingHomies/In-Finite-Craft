@@ -12,6 +12,12 @@ WORD_COMBINE_CHAR_LIMIT = 30
 DEFAULT_STARTING_ITEMS = ("Water", "Fire", "Wind", "Earth")
 BATCH_SIZE = 50
 
+LOCAL_NOTHING_INDICATION = "Nothing\t"
+
+
+def is_nothing(item: str) -> bool:
+    return item == "Nothing" or item == LOCAL_NOTHING_INDICATION
+
 
 def pair_to_int(i: int, j: int) -> int:
     if j < i:
@@ -36,13 +42,13 @@ def sort_pair(i: str, j: str) -> tuple[str, str]:
 def file_sanitize(s: str) -> str:
     s = s.replace("%", "%%")
     s = s.replace("\\", "%b")  # Backslash
-    s = s.replace("/", "%s")   # Slash
-    s = s.replace(":", "%c")   # Colon
-    s = s.replace("*", "%t")   # Star
-    s = s.replace("?", "%q")   # Question mark
-    s = s.replace("<", "%x")   # Opening angled brackets
-    s = s.replace(">", "%y")   # Closing angled brackets
-    s = s.replace("|", "%v")   # Vertical separator
+    s = s.replace("/", "%s")  # Slash
+    s = s.replace(":", "%c")  # Colon
+    s = s.replace("*", "%t")  # Star
+    s = s.replace("?", "%q")  # Question mark
+    s = s.replace("<", "%x")  # Opening angled brackets
+    s = s.replace(">", "%y")  # Closing angled brackets
+    s = s.replace("|", "%v")  # Vertical separator
     return s
 
 
@@ -59,6 +65,10 @@ def uriencode(s: str) -> str:
 
 def uriencode_2(s: str) -> str:
     return urllib.parse.quote(s)
+
+
+def uridecode(s: str) -> str:
+    return urllib.parse.unquote(s)
 
 
 def to_start_case(s: str) -> str:
@@ -135,4 +145,3 @@ def load_json(file: str) -> dict:
 def save_json(file: str, data: dict):
     with open(file, "w", encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
-

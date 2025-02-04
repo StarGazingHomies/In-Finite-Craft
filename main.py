@@ -58,7 +58,7 @@ for l1 in letters:
 
 # init_state = tuple(list(init_state) + elements + ["Periodic Table",])
 # init_state = tuple(list(init_state) + letters + letters2)
-init_state = tuple(list(init_state) + letters + letters2 + letters3)
+# init_state = tuple(list(init_state) + letters + letters2 + letters3)
 # init_state = tuple(list(init_state) + letters)
 # init_state = tuple(list(init_state) + speedrun_current_words)
 # init_state = ["Water"]
@@ -74,12 +74,13 @@ persistent_config = util.load_json("config.json")
 
 recipe_handler: Optional[recipe.RecipeHandler] = recipe.RecipeHandler(init_state, **persistent_config)
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 1
+depth_limit = 10
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False
 resume_last_run = False
 write_to_file = True
+multi_letter_file = "multi_letters.txt"
 
 last_game_state: Optional['GameState'] = None
 new_last_game_state: Optional['GameState'] = None
@@ -222,6 +223,14 @@ def process_node(state: GameState):
             autosave_counter = 0
             save_last_state()
 
+    num_of_letters = 0
+    for letter in state.items:
+        if letter in letters:
+            num_of_letters += 1
+    if num_of_letters >= 5:
+        with open('multi_letter_file', 'a') as file:
+            file.write(str(state) + "\n")
+
     # Multiple recipes for the same item at same depth
     depth = len(state) - len(init_state)
     if state.tail_item() not in best_depths:
@@ -274,9 +283,16 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
                 yield u, v
 
     # First do the batch requests
-    current_combinations = await recipe_handler.combine_batch(session, requests_gen())
+    current_combinations = await recipe_handler.combine_batch(session, list(requests_gen()))
     # TODO: Only request locally a single time - that is, use the results above to inform next steps directly
     # instead of having to pass in recipe handler and let state.child request
+
+    async def search_child(c) -> int:
+        if c.tail_item() in letters:
+            c.used[-1] += 1
+            return await dls(session, c, depth)
+        else:
+            return await dls(session, c, depth - 1)
 
     count = 0  # States counter
     unused_items = state.unused_items()  # Unused items
@@ -287,7 +303,7 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
             for i in range(j):  # i != j. We have to use two for unused_items to decrease.
                 child = await state.child(session, pair_to_int(unused_items[i], unused_items[j]))
                 if child is not None:
-                    count += await dls(session, child, depth - 1)
+                    count += await search_child(child)
     else:
         lower_limit = 0
         if depth == 1 and state.tail_index() != -1:  # Must use the 2nd last element, if it's not a default item.
@@ -296,7 +312,7 @@ async def dls(session: aiohttp.ClientSession, state: GameState, depth: int) -> i
         for i in range(lower_limit, limit(len(state))):  # Regular ol' searching
             child = await state.child(session, i)
             if child is not None:
-                count += await dls(session, child, depth - 1)
+                count += await search_child(child)
 
     return count
 

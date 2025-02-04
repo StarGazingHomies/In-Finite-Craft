@@ -46,7 +46,7 @@ async def _get_all_recipes(session: aiohttp.ClientSession, rh: recipe.RecipeHand
             estimated_time = 0
 
         if cur_precentage != last_precentage:
-            print(f"Recipe Progress: {cur_precentage}% ({completed_count}/{total_recipe_count}) | ETA: {estimated_time:.2f}s")
+            print(f"Recipe Progress: {cur_precentage}% ({completed_count}/{total_recipe_count}) | ETR: {estimated_time:.2f}s")
 
     async def batch_combine(session: aiohttp.ClientSession, batch: list[tuple[str, str]]):
         result = await rh.combine_batch(session, batch, check_local=False)

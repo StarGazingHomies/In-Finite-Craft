@@ -11,6 +11,13 @@ Maybe even alpha-beta pruning (using heuristic)?
 - Queueing system for requests (instead of just locking)
 
 `mane-parallel` TODO:
+- Make a common interface for all the recipe handlers
+
+
+- IMPORTANT: See if disk I/O or compute is the bottleneck, and fix them
+to get very, very close to 50rps
+- IDEA: Cache results that might be immediately used in the next step
+  (next step is by default local query which can be slow if there's a lot of them)
 - Add a threaded option (d1 then branch off), 
 to see if sacrificing a bit of "order" is worth it for 
 computational power
@@ -18,14 +25,43 @@ computational power
 - Revisit some of the old low-step data so I can verify
 up to 8-step or 9-step, because more have been found since
 revivals.
+- Make and test `recipes_ram.py`
+- Parallelize sqlite requests
 
 `mane-parallel` Shelved Ideas:
 - Lazy generation of recipes (not useful, unless the starting element set)
 is very large, which almost never happens.
+
+
+## Version 1.6.0a5
+- Added a `recipes_base.py` and the `RecipeBase` abc
+- Added a `recipes_ram.py` that uses a dictionary to store recipes...
+Well, not added, more like brought back from the dead.
+- Conveted `recipe.py` to `recipe_sqlite.py` and `recipe_requests.py`
+- Cleaned up recipe logic - instead of a monolithic recipe handler,
+use multiple layers of recipe handlers to handle different request types.
+- Recipe order goes `recipe_ram.py` -> `recipe_requests.py`
+- Note that the sqlite layer can go between ram and requests, but it's 
+not necessary. If I decide to drop recipes from ram (or not use ram)
+at any point, sqlite should be added back in.
+
+Important notes:
+1) `combine_batch` does **NOT** guarantee the original order 
+in requests, because it only re-requests the ones that are not returned by
+the current handler.
+2) All recipe requests now also return emojis and FD status, to streamline
+the process - after all the sql database need to keep track of it, while
+it's the requests that contain the info.
+
+
+## Version 1.6.0a4-multitargettest
+- Multi-target iddfs testing
+- 2694 vs 2682 for 7-step
 - 
+
 ## Version 1.6.0a3
 - Fixed an ordering issue where `A+B` and `B+A` would be considered different.
-This improves performance significantly.
+This improves performance quite a bit.
 
 
 ## Version 1.6.0a2

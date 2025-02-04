@@ -1204,7 +1204,9 @@ def analyze_optimal_save(output_file: str = "4_letter_sequences.txt"):
     for item_id, item, best_recipes in optimal_handler.get_all_optimals():
         best_recipes = best_recipes.split("==")[:-1]
         first_recipe = best_recipes[0].split("=")
-        if len(item) != 4 or not all([ord('a') <= ord(x) <= ord('z') for x in item.lower()]):
+        # if len(item) != 4 or not all([ord('a') <= ord(x) <= ord('z') for x in item.lower()]):
+        #     continue
+        if len(item) != 2:
             continue
         count += 1
         # print(f"{item_id}: {item}:")
@@ -1220,18 +1222,68 @@ def analyze_optimal_save(output_file: str = "4_letter_sequences.txt"):
     print(count)
 
 
+def find_all_optimals(input_file: str = "Depths/Depth 12/pl.txt", output_file: str = "pl_full.txt"):
+    optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
+
+    with open(input_file, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    with open(output_file, "w", encoding="utf-8") as fo:
+        for l in lines:
+            item = l.split("=")[1].strip()
+            recipes = optimal_handler.get_optimal(item)
+            print(item, recipes)
+            for r in recipes.split("==")[:-1]:
+                results_set = list(util.DEFAULT_STARTING_ITEMS)
+                l = r.split("=")
+                for i in range(0, len(l), 3):
+                    u, v, w = l[i:i + 3]
+                    results_set.append(w)
+                fo.write(f"{item} = {tuple(results_set)}\n")
+
+
 async def new_api_test():
-    cfg = util.load_json("headers.json")
+    cfg = util.load_json("config.json")
     rh = recipe.RecipeHandler(util.DEFAULT_STARTING_ITEMS, **cfg)
+    tools = ["Abbreviation", "Acronym", "Initials"]
+
+    with open("Depths/Depth 12/pl.txt", "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    items = []
+    for l in lines:
+        item = l.split("=")[1].strip()
+        items.append(item)
+
+    requests = [(item, tool) for item in items for tool in tools]
+
     async with aiohttp.ClientSession() as s:
-        print(await rh.request_batch(s, [("Water", "[s]")]))
+        results = await rh.combine_batch(s, requests)
+
+    for u, v, r in results:
+        if r.lower() == "pl":
+            print(u, v, r)
+
+
+def pull_certain_recipes(output_file: str):
+    cfg = util.load_json("config.json")
+    rh = recipe.RecipeHandler(util.DEFAULT_STARTING_ITEMS, **cfg)
+
+    for l in range(ord('A'), ord('Z')+1):
+        c = chr(l)
+        recipes = rh.get_crafts(c)
+        with open(output_file, "a") as f:
+            f.write(f"{c}:\n")
+            for r in recipes:
+                f.write(f"{r[0]} + {r[1]}\n")
+            f.write("\n")
 
 
 if __name__ == '__main__':
     pass
     # asyncio.run(new_api_test())
 
-    convert_to_savefile_new("savefile_test.txt")
+    pull_certain_recipes("letter-recipes.txt")
+    # convert_to_savefile_new("savefile_test.txt")
 
     # count_recipes()
     # analyze_recipes("result_count.json")
@@ -1243,6 +1295,7 @@ if __name__ == '__main__':
     # process_poseidons_percentage(s, f"{s.replace(" ", "_")}_poseidons.json", "occurrences.json")
     # analyze_folder_save("persistent.json")
     # analyze_optimal_save()
+    # find_all_optimals()
     # merge_sql("Depth 12/recipes_depth12_k.db")
     # analyze_tokens("depth12_h_results.txt")
     # analyze_tokens2()

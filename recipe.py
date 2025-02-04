@@ -308,7 +308,8 @@ class RecipeHandler:
     #         recipes.append((a, other, self.items_id.inverse[result]))
     #     return recipes
 
-    # Adapted from analog_hors on Discord
+    # Adapted from analog_hors on Discord (this comment is no longer accurate, but the very first version was)
+    # Might as well keep this comment in here
     async def combine(self, session: aiohttp.ClientSession, a: str, b: str, *, ignore_local: bool = False) -> str:
         if a > b:
             a, b = b, a
@@ -509,7 +510,13 @@ class RecipeHandler:
                     # print(resp.status)
                     if resp.status == 200:
                         self.sleep_time = self.sleep_default
-                        return await resp.json(content_type=None)
+                        response = await resp.json(content_type=None)
+                        print(response)
+                        for i, val in enumerate(response):
+                            val["result"] = util.uridecode(val["result"])
+                            response[i] = val
+                        print(response)
+                        return response
                     else:
                         print(f"Batch request of {len(batch)} items failed with status {resp.status}", file=sys.stderr)
                         print(f"Batch data: {batch_data}", file=sys.stderr)

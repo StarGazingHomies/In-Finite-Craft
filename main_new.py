@@ -43,8 +43,8 @@ autosave_interval = 500  # Save persistent file every 500 new visited elements
 autosave_counter = 0
 
 init_state = ('Water', 'Fire', 'Wind', 'Earth',
-              'Lake', 'Lava', 'Stone', 'Obsidian', 'Glass', 'Lens', 'Camera', 'Mirror', 'Black', 'Ink', 'Photograph',
-              'Negative', 'Darkroom', 'Postcard', 'Developer', 'Google', 'Googol', '-1', '-2', 'Letter', '-A')
+              'Smoke', 'Dust', 'Cloud', 'Lightning', 'Sun', 'Sunflower', 'Smoke Signal', 'Morse Code',
+              'Dot', 'Dot Dot Dot', 'Ellipsis', '…')
 
 
 @cache
@@ -253,7 +253,7 @@ async def dls(session: aiohttp.ClientSession, init_state: GameState, depth: int)
             # print(new_states, waiting_states, request_list, finished_requests, sep="\n")
             print(f"""Optimizer status:
 Loop #{loop_counter + status_period * status_print_counter} | Total requests: {recipe_handler.request_count}
-States queue:   {len(new_states)} new / {len(waiting_states)} waiting / {finished_state_counter} finished
+States queue:   {len(new_states)} new / {len(waiting_states)} waiting / {finished_state_counter} leaves finished
 Requests queue: {len(request_list)} queued / {len(finished_requests)} complete\n""")
             status_print_counter += 1
             loop_counter = 0
