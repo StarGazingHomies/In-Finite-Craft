@@ -1,43 +1,14 @@
 # Changelog
 
-TODO:
-- Hybrid Step-Generation Preprocessing
-- N-Step-Lookahead Generational Algorithm?
-Maybe even alpha-beta pruning (using heuristic)?
-- In-place Procedural Removal
-- Visualization (trees!)
-- Crafting Tree Location File Generation?
-- OptimizerRecipeList and RecipeHandler common interface
-- Queueing system for requests (instead of just locking)
-
-`mane-parallel` TODO:
-- Make a common interface for all the recipe handlers
-
-
-- IMPORTANT: See if disk I/O or compute is the bottleneck, and fix them
-to get very, very close to 50rps
-- IDEA: Cache results that might be immediately used in the next step
-  (next step is by default local query which can be slow if there's a lot of them)
-- Add a threaded option (d1 then branch off), 
-to see if sacrificing a bit of "order" is worth it for 
-computational power
-- Add saving and crash-handling logic to main_new
-- Revisit some of the old low-step data so I can verify
-up to 8-step or 9-step, because more have been found since
-revivals.
-- Make and test `recipes_ram.py`
-- Parallelize sqlite requests
-
-`mane-parallel` Shelved Ideas:
-- Lazy generation of recipes (not useful, unless the starting element set)
-is very large, which almost never happens.
+## Version 1.6.0a7
+- Apparently `main.py` is getting 0.86s now? I didn't change anything though lmao
 
 ## Version 1.6.0a6
 - Modified `main.py` to use the new requester logic.
 - Profiled a bit to see what the bottleneck is. Goal is to exceed V1.3 speeds, 
 on both `main.py` and `main_new.py`.
 - Removed `combine_batch` pre-call, since it's no longer necessary.
-- Current speed: 1.932s for 7-step, which is slower than 0.812s. By a lot. :(
+- Current speed: 1.932s for 7-step, which is slower than the old 0.812s. By a lot. :(
 
 
 ## Version 1.6.0a5

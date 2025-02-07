@@ -45,8 +45,8 @@ letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
 
 rearrange_words = ["Anagram", "Reverse", "Opposite", "Scramble", "Rearrange", "Palindrome", "Not"]
 
-speedrun_current_words = ["Lake", "Plant", "Lily", "Volcano", "Island", "Continent",
-                          "America", "USA", "Tea", "Taxes", "Filing", "File "]
+speedrun_current_words = ["Plant", "Tree", "Delta", "Paper", "Book", "River",
+                          "Alphabet", "Word", "Sentence", "Phrase", "Quote", "Punctuation"]
 
 letters2 = []
 for l1 in letters:
@@ -75,7 +75,7 @@ result_directory: str = "Results"
 
 persistent_config = util.load_json("config.json")
 
-rdb = recipes.recipe_ram.RecipeRam(recipes_file="cache/recipes.json", items_file="cache/items.json")
+rdb = recipes.recipe_ram.RecipeRam()
 rdb.set_name("dict")
 
 db = recipes.recipe_sqlite.RecipeSqlite(util.DEFAULT_STARTING_ITEMS)
@@ -238,7 +238,7 @@ def process_node(state: GameState):
         # if autosave_counter >= autosave_interval:
         #     autosave_counter = 0
         #     save_last_state()
-    #
+
     # # num_of_letters = 0
     # # for letter in state.items:
     # #     if letter in letters:
