@@ -21,7 +21,7 @@ class RecipeRam(RecipeBase):
 
     # Auto-commit settings
     auto_commit: bool = True
-    auto_commit_interval: int = 10000  # Commit every 1000 updates
+    auto_commit_interval: int = 100000  # Commit every 1000 updates
     current_response_count: int = 0
 
     def __init__(self, **kwargs):

@@ -100,6 +100,8 @@ class RecipeRequests(RecipeBase):
                         # print(f"Nothing result in batch request: {a} + {b}", flush=True)
 
                     result = {"result": "Nothing", "emoji": "", "isNew": False}
+                else:
+                    result["result"] = util.uridecode(result["result"])
                 final_results[batch_id[(a, b)]] = (a, b, (result['result'], result['emoji'], result['isNew']))
 
         return final_results
@@ -179,10 +181,6 @@ class RecipeRequests(RecipeBase):
                     if resp.status == 200:
                         self.sleep_time = self.sleep_default
                         response = await resp.json(content_type=None)
-                        # print(response)
-                        for i, val in enumerate(response):
-                            val["result"] = util.uridecode(val["result"])
-                            response[i] = val
                         # print(response)
                         return response
                     else:

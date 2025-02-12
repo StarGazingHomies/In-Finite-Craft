@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 1.6.0a8
+- Re-enabled optimal storage in preparation for stress test
+of the new requesting system
+- Fixed an issue where recipe requests are being uridecoded
+before checking for errors
+
 ## Version 1.6.0a7
 - Apparently `main.py` is getting 0.86s now? I didn't change anything though lmao
 

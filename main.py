@@ -89,11 +89,11 @@ rdb.set_next(db).set_next(requester)
 
 
 optimal_handler: Optional[optimals.OptimalRecipeStorage] = optimals.OptimalRecipeStorage()
-depth_limit = 7
+depth_limit = 14
 extra_depth = 0
 case_sensitive = True
 allow_starting_elements = False
-resume_last_run = False
+resume_last_run = True
 write_to_file = True
 # multi_letter_file = "multi_letters.txt"
 
@@ -177,7 +177,7 @@ class GameState:
         craft_result = (await rdb.combine(self.items[u], self.items[v]))[0]
 
         # Invalid crafts / no result
-        if craft_result is None or craft_result == "Nothing":
+        if craft_result is None or craft_result == "Nothing" or craft_result == "Nothing\t":
             return None
 
         # If we don't allow starting elements
@@ -235,9 +235,9 @@ def process_node(state: GameState):
     if tail_item not in visited:
         visited.add(tail_item)
         autosave_counter += 1
-        # if autosave_counter >= autosave_interval:
-        #     autosave_counter = 0
-        #     save_last_state()
+        if autosave_counter >= autosave_interval:
+            autosave_counter = 0
+            save_last_state()
 
     # # num_of_letters = 0
     # # for letter in state.items:
@@ -248,12 +248,12 @@ def process_node(state: GameState):
     # #         file.write(str(state) + "\n")
     #
     # # Multiple recipes for the same item at same depth
-    # depth = len(state) - len(init_state)
-    # if state.tail_item() not in best_depths:
-    #     best_depths[state.tail_item()] = depth
-    #
-    # if write_to_file and depth <= best_depths[state.tail_item()] + extra_depth:
-    #     save_optimal_recipe(state)
+    depth = len(state) - len(init_state)
+    if state.tail_item() not in best_depths:
+        best_depths[state.tail_item()] = depth
+
+    if write_to_file and depth <= best_depths[state.tail_item()] + extra_depth:
+        save_optimal_recipe(state)
 
 
 # Depth limited search
@@ -289,7 +289,7 @@ async def dls(state: GameState, depth: int) -> int:
     # Very simple way to implement batching so that I can start requesting again
     # before pitching to writing my own state queue
 
-    def requests_gen() -> Iterator[str, str]:
+    def requests_gen() -> Iterator[tuple[str, str]]:
         for i, u in enumerate(state.items):
             # print(i, u)
             for j, v in enumerate(state.items):
@@ -298,7 +298,7 @@ async def dls(state: GameState, depth: int) -> int:
                 yield u, v
 
     # First do the batch requests
-    # current_combinations = await rdb.combine_batch(list(requests_gen()))
+    current_combinations = await rdb.combine_batch(list(requests_gen()))
     # TODO: Only request locally a single time - that is, use the results above to inform next steps directly
     # instead of having to pass in recipe handler and let state.child request
 
