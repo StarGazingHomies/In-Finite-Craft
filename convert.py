@@ -4,13 +4,14 @@ import math
 import os
 import sqlite3
 from functools import cache
-from typing import Optional
+from typing import Optional, Iterator, Coroutine
 
 import aiohttp
 import bidict
 
 import optimals
 import recipe
+import recipes
 import util
 
 
@@ -875,7 +876,6 @@ def process_poseidons(result: str, file: str):
         items.append((key, value))
     items.sort(key=lambda x: x[1], reverse=True)
 
-
     r_sanitized = result.replace(" ", "_")
     with open(f"{r_sanitized}_poseidon_ingredients.txt", "w", encoding="utf-8") as f:
         for item in items:
@@ -1107,8 +1107,8 @@ def convert_to_savefile_new(output_file: str):
             recipes[r[2]] = [[u, v]]
 
     with open(output_file, "w", encoding="utf-8") as f:
-        json.dump({"elements": list(items_savefile.values()), "recipes": recipes, "darkMode": True}, f, ensure_ascii=False)
-
+        json.dump({"elements": list(items_savefile.values()), "recipes": recipes, "darkMode": True}, f,
+                  ensure_ascii=False)
 
 
 def count_FDs(file: str):
@@ -1268,7 +1268,7 @@ def pull_certain_recipes(output_file: str):
     cfg = util.load_json("config.json")
     rh = recipe.RecipeHandler(util.DEFAULT_STARTING_ITEMS, **cfg)
 
-    for l in range(ord('A'), ord('Z')+1):
+    for l in range(ord('A'), ord('Z') + 1):
         c = chr(l)
         recipes = rh.get_crafts(c)
         with open(output_file, "a") as f:
@@ -1278,11 +1278,81 @@ def pull_certain_recipes(output_file: str):
             f.write("\n")
 
 
+def alw_blw(a: int, b: int, s1: str = "", s2: str = "") -> Iterator[tuple[str, str]]:
+    if a != 0:
+        for l1 in range(26):
+            c1 = chr(l1 + ord('a'))
+            for r in alw_blw(a - 1, b, s1 + c1, s2):
+                yield r
+    elif b != 0:
+        for l2 in range(26):
+            c2 = chr(l2 + ord('a'))
+            for r in alw_blw(a, b - 1, s1, s2 + c2):
+                yield r
+    else:
+        yield s1, s2
+
+
+async def combine_alw_blw(a: int, b: int):
+    persistent_config = util.load_json("config.json")
+
+    rdb = recipes.recipe_ram.RecipeRam()
+    rdb.set_name("dict")
+
+    db = recipes.recipe_sqlite.RecipeSqlite(util.DEFAULT_STARTING_ITEMS)
+    db.set_name("sql")
+    db.print_new_recipes = False
+
+    requester = recipes.recipe_requests.RecipeRequests(None, **persistent_config)
+    requester.set_name("api")
+
+    # rdb.set_next(requester)
+    rdb.set_next(db).set_next(requester)
+
+    total_count = 26 ** (a + b)
+    current_count = 0
+    ongoing_count = 0
+
+    async with aiohttp.ClientSession() as session:
+        requester.set_session(session)
+        with open("5lw_output.txt", "w") as fout:
+            cur_batch = []
+            tasks: set[Coroutine] = set()
+            for s in alw_blw(a, b):
+                a_tc, b_tc = util.to_start_case(s[0]), util.to_start_case(s[1])
+                cur_batch.append((a_tc, b_tc))
+                if len(cur_batch) == 50:
+                    tasks.add(rdb.combine_batch(cur_batch))
+                    cur_batch = []
+                    ongoing_count += 50
+
+                if len(tasks) > 10:
+                    done, pending = await asyncio.wait(tasks, timeout=3)
+                    for done_task in done:
+                        results = done_task.result()
+                        for a, b, r in results:
+                            v, e, fd = r
+                            if len(v) == 5:
+                                fout.write(f"{a} + {b} = {v}\n")
+                        current_count += 50
+                        ongoing_count -= 50
+                    tasks = pending
+                    print(f"Current progress: {current_count} / {ongoing_count} / {total_count} ({(current_count / total_count * 100):.2f}%)")
+
+            results = await rdb.combine_batch(cur_batch)
+            for r, a, b in results:
+                if len(r) == 2:
+                    fout.write(f"{a} + {b} = {v}\n")
+
+
+
 if __name__ == '__main__':
     pass
     # asyncio.run(new_api_test())
 
-    pull_certain_recipes("letter-recipes.txt")
+    asyncio.run(combine_alw_blw(4, 1))
+
+    # pull_certain_recipes("letter-recipes.txt")
     # convert_to_savefile_new("savefile_test.txt")
 
     # count_recipes()
