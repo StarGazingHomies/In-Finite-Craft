@@ -3,6 +3,7 @@ import json
 import math
 import os
 import sqlite3
+import time
 from functools import cache
 from typing import Optional, Iterator, Coroutine
 
@@ -1312,10 +1313,13 @@ async def combine_alw_blw(a: int, b: int):
     total_count = 26 ** (a + b)
     current_count = 0
     ongoing_count = 0
+    valid_results = 0
+    fd_results = 0
+    seen_results = set()
 
     async with aiohttp.ClientSession() as session:
         requester.set_session(session)
-        with open("5lw_output.txt", "w") as fout:
+        with open("5lw_output.txt", "w", encoding='utf-8') as fout:
             cur_batch = []
             tasks: set[Coroutine] = set()
             for s in alw_blw(a, b):
@@ -1327,23 +1331,38 @@ async def combine_alw_blw(a: int, b: int):
                     ongoing_count += 50
 
                 if len(tasks) > 10:
-                    done, pending = await asyncio.wait(tasks, timeout=3)
+                    done, pending = await asyncio.wait(tasks, timeout=5)
+                    str_to_write = ""
                     for done_task in done:
                         results = done_task.result()
                         for a, b, r in results:
                             v, e, fd = r
-                            if len(v) == 5:
-                                fout.write(f"{a} + {b} = {v}\n")
+                            if len(v) == 5 and v == util.to_start_case(v) and v.lower() not in seen_results and util.is_alphabetical(v):
+                                str_to_write += f"{a} + {b} = {v}\n"
+                                valid_results += 1
+                                if fd:
+                                    fd_results += 1
+                                seen_results.add(v.lower())
                         current_count += 50
                         ongoing_count -= 50
+                    fout.write(str_to_write)
                     tasks = pending
-                    print(f"Current progress: {current_count} / {ongoing_count} / {total_count} ({(current_count / total_count * 100):.2f}%)")
+                    if requester.request_count == 0:
+                        t0 = time.perf_counter()
+                    else:
+                        t1 = time.perf_counter()
+                        print(f"""Current progress: {current_count} / {ongoing_count} / {total_count} ({(current_count / total_count * 100):.2f}%)
+Valid results: {valid_results} / {current_count} ({(valid_results / current_count * 100):.2f}%)
+Valid FDs: {fd_results} / {valid_results} ({(fd_results / valid_results * 100):.2f}%)
+RPS: {requester.request_count / (t1 - t0):.2f}""")
 
             results = await rdb.combine_batch(cur_batch)
             for r, a, b in results:
                 if len(r) == 2:
                     fout.write(f"{a} + {b} = {v}\n")
 
+
+# "\n".join([f"{a} + {b} = {c}" for a, b, c in zip(*[iter(s.split("==")[0].split("="))]*3)])
 
 
 if __name__ == '__main__':

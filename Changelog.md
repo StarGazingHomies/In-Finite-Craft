@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 1.6.0a9
+- Added `optimizers/recipe_bubbles.py`, inspired by Infinite Craft Helper,
+that optimizes an entire savefile at once.
+
 ## Version 1.6.0a8
 - Re-enabled optimal storage in preparation for stress test
 of the new requesting system

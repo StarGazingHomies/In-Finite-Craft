@@ -14,19 +14,23 @@ Maybe even alpha-beta pruning (using heuristic)?
 - Queueing system for requests (instead of just locking)
 
 ## Main_New (Paralleization test)
-- IMPORTANT: See if disk I/O or compute is the bottleneck, and fix them
-to get very, very close to 50rps
-- IDEA: Cache results that might be immediately used in the next step
-  (next step is by default local query which can be slow if there's a lot of them)
-- Add a threaded option (d1 then branch off), 
-to see if sacrificing a bit of "order" is worth it for 
-computational power
-- Add saving and crash-handling logic to main_new
-- Revisit some of the old low-step data so I can verify
-up to 8-step or 9-step, because more have been found since
-revivals.
-- Parallelize sqlite requests
+- Note to self: Disk IO is the bottleneck, and so is compute for high-steps to an extent.
+Removed disk IO in favour of keeping everything in ram again, but keeping
+it an option when ram limitations are reached.
 
-`mane-parallel` Shelved Ideas:
+- See if there is a speed up by getting rid of async (and using requests instead of aiohttp)
+
+- Add a threaded option (d2 then branch off and/or task based), 
+to see if sacrificing a bit of "order" is worth it for access to more cores.
+(Regardless of the runtime on my main pc, this will not be deployed 
+because my old laptops only have <=6 cores, and they are needed for other stuff)
+
+
+
+- Add saving and crash-handling logic to main_new
+- Once 5-step is fixed, re-verify all low-step recipes up to 9-step.
+
+### Main_New Shelved Ideas
 - Lazy generation of recipes (not useful, unless the starting element set)
 is very large (>1k elements), which almost never happens.
+- Parallelize sqlite requests (if threading is helpful)

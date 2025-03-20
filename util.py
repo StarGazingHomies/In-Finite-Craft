@@ -81,6 +81,13 @@ def to_start_case(s: str) -> str:
     return new_str
 
 
+def is_alphabetical(s: str) -> bool:
+    for c in s:
+        if not ord('a') <= ord(c.lower()) <= ord('z'):
+            return False
+    return True
+
+
 # class Tokenizer:
 #     model: Llama
 #     tokenizer: llama_cpp.LlamaTokenizer

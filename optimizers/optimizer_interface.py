@@ -6,6 +6,7 @@ and converting from IDs to names and vice versa.
 Also includes generation of each element's generation
 as well as converting from a save file.
 """
+import time
 from collections import deque
 from typing import Optional
 from bidict import bidict
@@ -22,8 +23,12 @@ class OptimizerRecipeList:
     # int_to_pair(ingredient1, ingredient2) -> result
     fwd: dict[int, int]
     # Backward recipe list
-    # result -> [(ingredient1, ingredient2), (ingredient1, ingredient2)]
+    # result -> [(ingredient1, ingredient2), (ingredient1, ingredient2), ...]
     bwd: dict[int, list[tuple[int, int]]]
+    # Sideways recipe list (not needed for most applications)
+    # ingredient1 -> [(ingredient2, result), (ingredient2, result), ...]
+    side: dict[int, list[tuple[int, int]]]
+    side_generated: bool = False
     # Generation of each element
     # item_id -> generation
     gen: Optional[dict[int, int]]
@@ -87,6 +92,23 @@ class OptimizerRecipeList:
             return None
         return self.hybrid_gen.get(item_id)
 
+    def generate_side(self) -> None:
+        if self.side_generated:
+            return
+
+        self.side = {}
+
+        for k, v in self.bwd.items():
+            for i, j in v:
+                if i not in self.side:
+                    self.side[i] = []
+                self.side[i].append((j, k))
+
+                if j not in self.side:
+                    self.side[j] = []
+                self.side[j].append((i, k))
+        self.side_generated = True
+
     def get_depth_id(self, item_id: int) -> Optional[int]:
         if self.depth is None:
             return None
@@ -141,30 +163,30 @@ class OptimizerRecipeList:
             return
         self.gen_generated = True
 
+        t0 = time.perf_counter()
+        self.generate_side()
+        t1 = time.perf_counter()
+
         self.gen: dict[int, int] = {}  # The generation of each element
-        visited: list[int] = []  # Already processed elements
+        visited: set[int] = set()  # Already processed elements
         for item in init_items:
             self.gen[self.get_id(item)] = 0
-            visited.append(self.get_id(item))
+            visited.add(self.get_id(item))
 
-        queue = deque()
+        queue = set()
 
         def enqueue(u: int, v: int):
-            # What the fuck happened?
-            if u not in self.gen:
-                raise ValueError(f"Item {u} not in generation list")
-            if v not in self.gen:
-                raise ValueError(f"Item {v} not in generation list")
 
-            # New generation is the old generation + 1
-            new_generation: int = max(self.gen[u], self.gen[v]) + 1
             # The crafting result of u + v
             new_item: int = self.get_result_id(u, v)
-
-            # Only add if the item isn't visited. Generation will always be increasing since it's effectively bfs.
             if new_item and new_item >= 0 and new_item not in self.gen:
+
+                # New generation is the old generation + 1
+                new_generation: int = max(self.gen[u], self.gen[v]) + 1
+
+                # Only add if the item isn't visited. Generation will always be increasing since it's effectively bfs.
                 self.gen[new_item] = new_generation
-                queue.append(new_item)
+                queue.add(new_item)
 
         # Initialize based on what items are available
         for i, item1 in enumerate(init_items):
@@ -172,11 +194,20 @@ class OptimizerRecipeList:
                 enqueue(self.get_id(item1), self.get_id(item2))
 
         while len(queue) > 0:
-            cur = queue.popleft()
-            visited.append(cur)
-            for other in visited:
-                enqueue(cur, other)
+            cur = queue.pop()
+            if cur in visited:
+                continue
+            visited.add(cur)
+            if cur not in self.side:
+                continue
 
+            for other, result in self.side[cur]:
+                if other in self.gen:
+                    enqueue(cur, other)
+
+        t2 = time.perf_counter()
+        print("Preprocessing took ", t1 - t0, " seconds")
+        print("Generation took ", t2 - t1, " seconds")
         return
 
     def generate_hybrid_generations(self, num_steps: int = 5, init_items: list[str] = DEFAULT_STARTING_ITEMS) -> None:
@@ -251,13 +282,14 @@ def optimizer_recipes_to_savefile(optimizer: OptimizerRecipeList) -> dict:
 
 
 def main():
-    savefile_name = "../yui_optimizer_savefile.json"
+    savefile_name = "infinitecraft (104).json"
     optimizer_recipes = savefile_to_optimizer_recipes(savefile_name)
     print(optimizer_recipes)
     optimizer_recipes.generate_generations()
-    for item_id, generation in optimizer_recipes.gen.items():
-        print(f"{optimizer_recipes.get_name(item_id)}: {generation}")
-    print(optimizer_recipes.gen)
+    # print(f"Generation took {t1 - t0} seconds")
+    # for item_id, generation in optimizer_recipes.gen.items():
+    #     print(f"{optimizer_recipes.get_name(item_id)}: {generation}")
+    # print(optimizer_recipes.gen)
 
 
 if __name__ == '__main__':

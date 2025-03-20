@@ -511,11 +511,13 @@ class RecipeHandler:
                     if resp.status == 200:
                         self.sleep_time = self.sleep_default
                         response = await resp.json(content_type=None)
-                        print(response)
+                        # print(response)
+                        # TODO: Move this somewhere else more appropriate
                         for i, val in enumerate(response):
-                            val["result"] = util.uridecode(val["result"])
-                            response[i] = val
-                        print(response)
+                            if "result" in val:
+                                val["result"] = util.uridecode(val["result"])
+                                response[i] = val
+                        # print(response)
                         return response
                     else:
                         print(f"Batch request of {len(batch)} items failed with status {resp.status}", file=sys.stderr)

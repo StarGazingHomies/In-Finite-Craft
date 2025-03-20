@@ -102,7 +102,10 @@ class RecipeRequests(RecipeBase):
                     result = {"result": "Nothing", "emoji": "", "isNew": False}
                 else:
                     result["result"] = util.uridecode(result["result"])
-                final_results[batch_id[(a, b)]] = (a, b, (result['result'], result['emoji'], result['isNew']))
+                final_results[batch_id[(a, b)]] = (a, b, (
+                    result['result'],
+                    result['emoji'] if 'emoji' in result else '',
+                    result['isNew'] if 'isNew' in result else False))
 
         return final_results
 
